@@ -1,0 +1,21 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql://root:krmbe4bb@host.docker.internal:5432/ai_nav
+      - FEISHU_APP_ID=${FEISHU_APP_ID}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      - ADMIN_OPEN_IDS=${ADMIN_OPEN_IDS:-}
+      - PUSH_CHAT_ID=${PUSH_CHAT_ID:-}
+      - DEBUG=false

@@ -1,0 +1,29 @@
+# Web框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# 数据库
+sqlalchemy>=2.0.25
+greenlet>=3.0.0
+aiosqlite>=0.19.0       # SQLite异步驱动（本地开发）
+
+# 数据验证
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+
+# 认证
+python-jose[cryptography]>=3.3.0
+
+# HTTP客户端
+httpx>=0.26.0
+
+# 定时任务
+apscheduler>=3.10.4
+
+# 工具
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+
+# PostgreSQL驱动（生产环境用，Windows需要VC++编译工具）
+# 如需PostgreSQL支持，取消下行注释并安装：
+# asyncpg>=0.29.0

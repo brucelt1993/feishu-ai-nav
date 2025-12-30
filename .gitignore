@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.uv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# 环境配置
+.env
+.env.local
+.env.*.local
+
+# 数据库
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+
+# Docker数据卷
+data/
+
+# uv
+uv.lock
