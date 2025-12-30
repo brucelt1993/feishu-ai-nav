@@ -104,7 +104,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { categoriesApi, toolsApi } from '@/api'
-import { feishuLogin, openInFeishu, isInFeishu } from '@/utils/feishu'
+import { initFeishuSDK, feishuLogin, openInFeishu, isInFeishu } from '@/utils/feishu'
 
 const userStore = useUserStore()
 const categories = ref([])
@@ -131,10 +131,15 @@ const currentTools = computed(() => currentCategory.value?.tools || [])
 onMounted(async () => {
   await loadCategories()
 
-  // 自动登录
+  // 飞书环境自动登录
   if (isInFeishu() && !userStore.isLoggedIn) {
     try {
-      await feishuLogin()
+      // 先初始化JSSDK
+      const sdkReady = await initFeishuSDK()
+      if (sdkReady) {
+        await feishuLogin()
+        console.info('飞书自动登录成功')
+      }
     } catch (e) {
       console.warn('自动登录失败:', e)
     }
@@ -174,9 +179,14 @@ async function handleLogin() {
   }
 
   try {
+    // 确保SDK已初始化
+    if (!window.__FEISHU_APP_ID__) {
+      await initFeishuSDK()
+    }
     await feishuLogin()
     ElMessage.success('登录成功')
   } catch (error) {
+    console.error('登录失败:', error)
     ElMessage.error('登录失败')
   }
 }

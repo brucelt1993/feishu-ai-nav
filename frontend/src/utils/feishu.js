@@ -15,6 +15,9 @@ export async function initFeishuSDK() {
       return false
     }
 
+    // 保存appId供后续使用
+    window.__FEISHU_APP_ID__ = config.appId
+
     // 配置JSSDK
     window.h5sdk.config({
       appId: config.appId,
