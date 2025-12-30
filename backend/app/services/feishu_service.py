@@ -136,6 +136,7 @@ class FeishuService:
                 logger.error(f"获取user_access_token失败: {data}")
                 raise Exception(f"登录失败: {data.get('error_description')}")
 
+            logger.info(f"OAuth返回数据: {data}")
             return data
 
     async def get_user_info(self, user_access_token: str) -> dict:
