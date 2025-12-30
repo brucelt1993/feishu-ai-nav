@@ -132,16 +132,21 @@ onMounted(async () => {
   await loadCategories()
 
   // 飞书环境自动登录
+  console.log('检测飞书环境:', isInFeishu(), 'UA:', navigator.userAgent)
+
   if (isInFeishu() && !userStore.isLoggedIn) {
     try {
-      // 先初始化JSSDK
+      console.log('开始初始化飞书SDK...')
       const sdkReady = await initFeishuSDK()
+      console.log('SDK初始化结果:', sdkReady)
+
       if (sdkReady) {
+        console.log('开始飞书登录...')
         await feishuLogin()
         console.info('飞书自动登录成功')
       }
     } catch (e) {
-      console.warn('自动登录失败:', e)
+      console.error('自动登录失败:', e)
     }
   }
 })
