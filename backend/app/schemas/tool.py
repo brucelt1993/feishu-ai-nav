@@ -1,5 +1,5 @@
 """工具相关Schema"""
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
@@ -10,7 +10,7 @@ class ToolBase(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     target_url: str
-    category: Optional[str] = None
+    category_id: Optional[int] = None
     sort_order: int = 0
     is_active: bool = True
 
@@ -26,9 +26,19 @@ class ToolUpdate(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     target_url: Optional[str] = None
-    category: Optional[str] = None
+    category_id: Optional[int] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
+
+
+class CategoryBrief(BaseModel):
+    """分类简要信息"""
+    id: int
+    name: str
+    color: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class ToolResponse(ToolBase):
@@ -36,6 +46,7 @@ class ToolResponse(ToolBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    category: Optional[CategoryBrief] = None
 
     class Config:
         from_attributes = True

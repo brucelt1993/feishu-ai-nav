@@ -1,5 +1,20 @@
 -- 飞书AI工具导航栏 - 数据库初始化脚本
 
+-- 分类表（支持两级）
+CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    parent_id INT REFERENCES categories(id),
+    icon_url VARCHAR(500),
+    color VARCHAR(20),
+    sort_order INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_sort ON categories(sort_order);
+
 -- 工具表
 CREATE TABLE IF NOT EXISTS tools (
     id SERIAL PRIMARY KEY,
@@ -7,7 +22,7 @@ CREATE TABLE IF NOT EXISTS tools (
     description TEXT,
     icon_url VARCHAR(500),
     target_url VARCHAR(1000) NOT NULL,
-    category VARCHAR(50),
+    category_id INT REFERENCES categories(id),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
     -- 权限扩展预留
@@ -21,6 +36,7 @@ CREATE TABLE IF NOT EXISTS tools (
 
 CREATE INDEX IF NOT EXISTS idx_tools_active ON tools(is_active);
 CREATE INDEX IF NOT EXISTS idx_tools_sort ON tools(sort_order);
+CREATE INDEX IF NOT EXISTS idx_tools_category ON tools(category_id);
 
 -- 用户表
 CREATE TABLE IF NOT EXISTS users (
@@ -64,10 +80,26 @@ CREATE TABLE IF NOT EXISTS statistics_cache (
     UNIQUE(stat_date, stat_type)
 );
 
--- 插入示例数据
-INSERT INTO tools (name, description, icon_url, target_url, sort_order) VALUES
-('ChatGPT', 'OpenAI对话助手', 'https://cdn.example.com/icons/chatgpt.png', 'https://chat.openai.com', 1),
-('Claude', 'Anthropic智能助手', 'https://cdn.example.com/icons/claude.png', 'https://claude.ai', 2),
-('Midjourney', 'AI图像生成', 'https://cdn.example.com/icons/mj.png', 'https://midjourney.com', 3),
-('Notion AI', '智能笔记助手', 'https://cdn.example.com/icons/notion.png', 'https://notion.so', 4)
+-- 插入示例分类
+INSERT INTO categories (name, icon_url, color, sort_order) VALUES
+('AI对话', NULL, '#409eff', 1),
+('AI绘画', NULL, '#67c23a', 2),
+('AI效率', NULL, '#e6a23c', 3)
+ON CONFLICT DO NOTHING;
+
+-- 插入二级分类
+INSERT INTO categories (name, parent_id, color, sort_order) VALUES
+('通用对话', 1, '#409eff', 1),
+('代码助手', 1, '#409eff', 2),
+('图像生成', 2, '#67c23a', 1),
+('写作助手', 3, '#e6a23c', 1)
+ON CONFLICT DO NOTHING;
+
+-- 插入示例工具
+INSERT INTO tools (name, description, target_url, category_id, sort_order) VALUES
+('ChatGPT', 'OpenAI对话助手', 'https://chat.openai.com', 4, 1),
+('Claude', 'Anthropic智能助手', 'https://claude.ai', 4, 2),
+('GitHub Copilot', 'AI代码补全', 'https://github.com/features/copilot', 5, 1),
+('Midjourney', 'AI图像生成', 'https://midjourney.com', 6, 1),
+('Notion AI', '智能笔记助手', 'https://notion.so', 7, 1)
 ON CONFLICT DO NOTHING;

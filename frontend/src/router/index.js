@@ -20,6 +20,12 @@ const routes = [
         meta: { title: '概览' }
       },
       {
+        path: 'categories',
+        name: 'AdminCategories',
+        component: () => import('@/views/admin/Categories.vue'),
+        meta: { title: '分类管理' }
+      },
+      {
         path: 'tools',
         name: 'AdminTools',
         component: () => import('@/views/admin/Tools.vue'),

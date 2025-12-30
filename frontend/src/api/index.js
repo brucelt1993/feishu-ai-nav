@@ -33,6 +33,11 @@ export const authApi = {
   login: (code) => api.post('/auth/login', { code }),
 }
 
+// ============ 分类API ============
+export const categoriesApi = {
+  getTree: () => api.get('/categories'),
+}
+
 // ============ 工具API ============
 export const toolsApi = {
   getList: () => api.get('/tools'),
@@ -46,8 +51,16 @@ export const feishuApi = {
 
 // ============ 管理API ============
 export const adminApi = {
+  // 分类管理
+  getCategories: () => api.get('/admin/categories'),
+  createCategory: (data) => api.post('/admin/categories', data),
+  updateCategory: (id, data) => api.put(`/admin/categories/${id}`, data),
+  deleteCategory: (id) => api.delete(`/admin/categories/${id}`),
+
   // 工具管理
-  getTools: (page = 1, size = 20) => api.get('/admin/tools', { params: { page, size } }),
+  getTools: (page = 1, size = 20, categoryId) => api.get('/admin/tools', {
+    params: { page, size, category_id: categoryId }
+  }),
   createTool: (data) => api.post('/admin/tools', data),
   updateTool: (id, data) => api.put(`/admin/tools/${id}`, data),
   deleteTool: (id) => api.delete(`/admin/tools/${id}`),

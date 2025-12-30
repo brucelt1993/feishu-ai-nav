@@ -2,14 +2,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import Optional
+from sqlalchemy.orm import selectinload
+from typing import Optional, List
 import logging
 
 from ..database import get_db
-from ..models import Tool, User
+from ..models import Tool, User, Category
 from ..schemas import (
     ToolCreate, ToolUpdate, ToolResponse, ToolList,
     StatsOverview, ToolStats, UserStats,
+    CategoryCreate, CategoryUpdate, CategoryResponse,
 )
 from ..services.stats_service import StatsService
 from ..config import get_settings
@@ -41,23 +43,133 @@ async def verify_admin(
     return open_id
 
 
+# ============ 分类管理 ============
+
+@router.get("/categories", response_model=List[CategoryResponse])
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取所有分类"""
+    query = select(Category).order_by(Category.parent_id.nullsfirst(), Category.sort_order, Category.id)
+    result = await db.execute(query)
+    categories = result.scalars().all()
+    return [CategoryResponse.model_validate(c) for c in categories]
+
+
+@router.post("/categories", response_model=CategoryResponse)
+async def create_category(
+    data: CategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """创建分类"""
+    # 校验父分类
+    if data.parent_id:
+        parent = await db.get(Category, data.parent_id)
+        if not parent:
+            raise HTTPException(status_code=400, detail="父分类不存在")
+        if parent.parent_id:
+            raise HTTPException(status_code=400, detail="只支持两级分类")
+
+    category = Category(**data.model_dump())
+    db.add(category)
+    await db.commit()
+    await db.refresh(category)
+
+    logger.info(f"创建分类: {category.name}")
+    return CategoryResponse.model_validate(category)
+
+
+@router.put("/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: int,
+    data: CategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """更新分类"""
+    category = await db.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 校验父分类
+    if data.parent_id is not None:
+        if data.parent_id == category_id:
+            raise HTTPException(status_code=400, detail="不能将自己设为父分类")
+        if data.parent_id:
+            parent = await db.get(Category, data.parent_id)
+            if not parent:
+                raise HTTPException(status_code=400, detail="父分类不存在")
+            if parent.parent_id:
+                raise HTTPException(status_code=400, detail="只支持两级分类")
+
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(category, key, value)
+
+    await db.commit()
+    await db.refresh(category)
+
+    logger.info(f"更新分类: {category.name}")
+    return CategoryResponse.model_validate(category)
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """删除分类"""
+    category = await db.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 检查是否有子分类
+    children_query = select(func.count(Category.id)).where(Category.parent_id == category_id)
+    children_count = (await db.execute(children_query)).scalar() or 0
+    if children_count > 0:
+        raise HTTPException(status_code=400, detail="请先删除子分类")
+
+    # 检查是否有工具
+    tools_query = select(func.count(Tool.id)).where(Tool.category_id == category_id)
+    tools_count = (await db.execute(tools_query)).scalar() or 0
+    if tools_count > 0:
+        raise HTTPException(status_code=400, detail="请先移除该分类下的工具")
+
+    await db.delete(category)
+    await db.commit()
+
+    logger.info(f"删除分类: {category.name}")
+    return {"success": True}
+
+
 # ============ 工具管理 ============
 
 @router.get("/tools", response_model=ToolList)
 async def list_tools(
     page: int = 1,
     size: int = 20,
+    category_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(verify_admin),
 ):
     """获取工具列表（分页）"""
+    # 构建查询
+    base_query = select(Tool).options(selectinload(Tool.category))
+    count_query = select(func.count(Tool.id))
+
+    if category_id is not None:
+        base_query = base_query.where(Tool.category_id == category_id)
+        count_query = count_query.where(Tool.category_id == category_id)
+
     # 总数
-    total_query = select(func.count(Tool.id))
-    total = (await db.execute(total_query)).scalar() or 0
+    total = (await db.execute(count_query)).scalar() or 0
 
     # 分页查询
     offset = (page - 1) * size
-    query = select(Tool).order_by(Tool.sort_order, Tool.id).offset(offset).limit(size)
+    query = base_query.order_by(Tool.sort_order, Tool.id).offset(offset).limit(size)
     result = await db.execute(query)
     tools = result.scalars().all()
 
@@ -74,13 +186,19 @@ async def create_tool(
     admin_id: str = Depends(verify_admin),
 ):
     """创建工具"""
+    # 校验分类
+    if data.category_id:
+        category = await db.get(Category, data.category_id)
+        if not category:
+            raise HTTPException(status_code=400, detail="分类不存在")
+
     tool = Tool(
         **data.model_dump(),
         created_by=admin_id,
     )
     db.add(tool)
     await db.commit()
-    await db.refresh(tool)
+    await db.refresh(tool, ["category"])
 
     logger.info(f"创建工具: {tool.name} by {admin_id}")
     return ToolResponse.model_validate(tool)
@@ -94,11 +212,19 @@ async def update_tool(
     _: str = Depends(verify_admin),
 ):
     """更新工具"""
-    result = await db.execute(select(Tool).where(Tool.id == tool_id))
+    result = await db.execute(
+        select(Tool).options(selectinload(Tool.category)).where(Tool.id == tool_id)
+    )
     tool = result.scalar_one_or_none()
 
     if not tool:
         raise HTTPException(status_code=404, detail="工具不存在")
+
+    # 校验分类
+    if data.category_id is not None and data.category_id:
+        category = await db.get(Category, data.category_id)
+        if not category:
+            raise HTTPException(status_code=400, detail="分类不存在")
 
     # 更新非空字段
     update_data = data.model_dump(exclude_unset=True)
@@ -106,7 +232,7 @@ async def update_tool(
         setattr(tool, key, value)
 
     await db.commit()
-    await db.refresh(tool)
+    await db.refresh(tool, ["category"])
 
     logger.info(f"更新工具: {tool.name}")
     return ToolResponse.model_validate(tool)

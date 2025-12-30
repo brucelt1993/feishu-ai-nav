@@ -1,5 +1,6 @@
 """工具模型"""
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
 
@@ -13,7 +14,7 @@ class Tool(Base):
     description = Column(Text)
     icon_url = Column(String(500))
     target_url = Column(String(1000), nullable=False)
-    category = Column(String(50))
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     sort_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
 
@@ -25,3 +26,6 @@ class Tool(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     created_by = Column(String(100))
+
+    # 关系
+    category = relationship("Category", back_populates="tools")

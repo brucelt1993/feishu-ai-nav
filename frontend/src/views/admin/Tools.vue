@@ -6,6 +6,27 @@
         <el-icon><Plus /></el-icon>
         添加工具
       </el-button>
+      <el-select
+        v-model="filterCategoryId"
+        placeholder="筛选分类"
+        clearable
+        style="width: 200px; margin-left: 12px"
+        @change="loadTools"
+      >
+        <el-option-group
+          v-for="parent in categoryTree"
+          :key="parent.id"
+          :label="parent.name"
+        >
+          <el-option :label="parent.name + '（全部）'" :value="parent.id" />
+          <el-option
+            v-for="child in parent.children"
+            :key="child.id"
+            :label="'└ ' + child.name"
+            :value="child.id"
+          />
+        </el-option-group>
+      </el-select>
     </div>
 
     <!-- 工具列表 -->
@@ -20,7 +41,14 @@
       </el-table-column>
       <el-table-column prop="name" label="名称" width="150" />
       <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column prop="target_url" label="链接" show-overflow-tooltip />
+      <el-table-column label="分类" width="120">
+        <template #default="{ row }">
+          <el-tag v-if="row.category" size="small" :color="row.category.color" effect="dark">
+            {{ row.category.name }}
+          </el-tag>
+          <span v-else class="no-category">未分类</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="sort_order" label="排序" width="80" />
       <el-table-column label="状态" width="80">
         <template #default="{ row }">
@@ -87,8 +115,15 @@
         <el-form-item label="跳转链接" prop="target_url">
           <el-input v-model="formData.target_url" placeholder="请输入目标URL" />
         </el-form-item>
-        <el-form-item label="分类" prop="category">
-          <el-input v-model="formData.category" placeholder="可选" />
+        <el-form-item label="分类" prop="category_id">
+          <el-cascader
+            v-model="categoryPath"
+            :options="categoryOptions"
+            :props="{ checkStrictly: true, emitPath: false, value: 'id', label: 'name' }"
+            placeholder="请选择分类"
+            clearable
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="排序" prop="sort_order">
           <el-input-number v-model="formData.sort_order" :min="0" />
@@ -109,7 +144,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
@@ -117,21 +152,24 @@ import { adminApi } from '@/api'
 const loading = ref(false)
 const submitting = ref(false)
 const tools = ref([])
+const categories = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = ref(20)
+const filterCategoryId = ref(null)
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const formRef = ref(null)
+const categoryPath = ref(null)
 
 const formData = reactive({
   name: '',
   description: '',
   icon_url: '',
   target_url: '',
-  category: '',
+  category_id: null,
   sort_order: 0,
   is_active: true
 })
@@ -141,14 +179,49 @@ const formRules = {
   target_url: [{ required: true, message: '请输入跳转链接', trigger: 'blur' }]
 }
 
-onMounted(() => {
-  loadTools()
+// 构建分类树（用于筛选）
+const categoryTree = computed(() => {
+  const parents = categories.value.filter(c => !c.parent_id)
+  return parents.map(p => ({
+    ...p,
+    children: categories.value.filter(c => c.parent_id === p.id)
+  }))
 })
+
+// 构建级联选项（用于表单）
+const categoryOptions = computed(() => {
+  return categoryTree.value.map(parent => ({
+    id: parent.id,
+    name: parent.name,
+    children: parent.children.map(child => ({
+      id: child.id,
+      name: child.name
+    }))
+  }))
+})
+
+// 监听categoryPath变化，同步到formData
+watch(categoryPath, (val) => {
+  formData.category_id = val
+})
+
+onMounted(async () => {
+  await loadCategories()
+  await loadTools()
+})
+
+async function loadCategories() {
+  try {
+    categories.value = await adminApi.getCategories()
+  } catch (error) {
+    console.error('加载分类失败:', error)
+  }
+}
 
 async function loadTools() {
   try {
     loading.value = true
-    const res = await adminApi.getTools(page.value, size.value)
+    const res = await adminApi.getTools(page.value, size.value, filterCategoryId.value)
     tools.value = res.items
     total.value = res.total
   } catch (error) {
@@ -174,10 +247,11 @@ function handleEdit(row) {
     description: row.description || '',
     icon_url: row.icon_url || '',
     target_url: row.target_url,
-    category: row.category || '',
+    category_id: row.category_id,
     sort_order: row.sort_order || 0,
     is_active: row.is_active
   })
+  categoryPath.value = row.category_id
   dialogVisible.value = true
 }
 
@@ -223,10 +297,11 @@ function resetForm() {
     description: '',
     icon_url: '',
     target_url: '',
-    category: '',
+    category_id: null,
     sort_order: 0,
     is_active: true
   })
+  categoryPath.value = null
 }
 </script>
 
@@ -239,11 +314,18 @@ function resetForm() {
 
 .toolbar {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
 }
 
 .pagination {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.no-category {
+  color: #c0c4cc;
+  font-size: 13px;
 }
 </style>

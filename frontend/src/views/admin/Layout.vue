@@ -16,6 +16,10 @@
           <el-icon><DataBoard /></el-icon>
           <span>概览</span>
         </el-menu-item>
+        <el-menu-item index="/admin/categories">
+          <el-icon><Grid /></el-icon>
+          <span>分类管理</span>
+        </el-menu-item>
         <el-menu-item index="/admin/tools">
           <el-icon><Tools /></el-icon>
           <span>工具管理</span>
@@ -57,7 +61,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { DataBoard, Tools, TrendCharts, Back } from '@element-plus/icons-vue'
+import { DataBoard, Grid, Tools, TrendCharts, Back } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
