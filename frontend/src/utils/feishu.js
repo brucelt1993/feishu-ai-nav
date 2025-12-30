@@ -101,9 +101,14 @@ export function isInFeishu() {
  * 在飞书中打开URL
  */
 export function openInFeishu(url) {
-  if (isInFeishu() && window.tt) {
-    window.tt.openLink({
-      url: url
+  if (isInFeishu() && window.h5sdk?.biz?.util?.openLink) {
+    window.h5sdk.biz.util.openLink({
+      url: url,
+      onSuccess: () => {},
+      onFail: () => {
+        // 失败时用普通方式打开
+        window.open(url, '_blank')
+      }
     })
   } else {
     window.open(url, '_blank')
