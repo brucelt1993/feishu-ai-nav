@@ -6,6 +6,12 @@ import { useUserStore } from '@/stores/user'
  */
 export async function initFeishuSDK() {
   try {
+    // 检查SDK是否加载
+    if (!window.h5sdk) {
+      console.error('飞书SDK未加载，请确保在飞书环境中打开')
+      return false
+    }
+
     // 获取jsapi_ticket配置
     const url = window.location.href.split('#')[0]
     const config = await feishuApi.getJsapiTicket(url)

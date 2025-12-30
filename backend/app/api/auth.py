@@ -39,13 +39,14 @@ def verify_token(token: str) -> str:
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     """飞书免登登录"""
     try:
-        # 通过code获取user_access_token
+        # 通过code获取user_access_token（OAuth v2返回格式）
         token_data = await feishu_service.get_user_access_token(request.code)
         user_access_token = token_data["access_token"]
+        # OAuth v2 直接返回 open_id
+        open_id = token_data["open_id"]
 
-        # 获取用户信息
+        # 获取用户详细信息
         user_info = await feishu_service.get_user_info(user_access_token)
-        open_id = user_info["open_id"]
 
         # 查找或创建用户
         result = await db.execute(select(User).where(User.open_id == open_id))

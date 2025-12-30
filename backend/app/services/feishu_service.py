@@ -116,22 +116,27 @@ class FeishuService:
     async def get_user_access_token(self, code: str) -> dict:
         """通过code获取user_access_token"""
         url = f"{self.BASE_URL}/authen/v2/oauth/token"
+        # OAuth v2 需要用表单格式，参数名是 client_id/client_secret
         payload = {
             "grant_type": "authorization_code",
             "code": code,
-            "app_id": self.app_id,
-            "app_secret": self.app_secret,
+            "client_id": self.app_id,
+            "client_secret": self.app_secret,
         }
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(
+                url,
+                data=payload,  # 用 data 而不是 json
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
             data = response.json()
 
-            if data.get("code") != 0:
+            if "error" in data:
                 logger.error(f"获取user_access_token失败: {data}")
-                raise Exception(f"登录失败: {data.get('msg')}")
+                raise Exception(f"登录失败: {data.get('error_description')}")
 
-            return data["data"]
+            return data
 
     async def get_user_info(self, user_access_token: str) -> dict:
         """获取用户信息"""
