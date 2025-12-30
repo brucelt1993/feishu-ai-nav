@@ -19,5 +19,6 @@ class Category(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     # 关系
-    parent = relationship("Category", remote_side=[id], backref="children")
+    parent = relationship("Category", remote_side=[id], back_populates="children")
+    children = relationship("Category", back_populates="parent", foreign_keys=[parent_id])
     tools = relationship("Tool", back_populates="category")
