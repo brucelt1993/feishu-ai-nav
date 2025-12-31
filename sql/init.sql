@@ -139,6 +139,12 @@ CREATE TABLE IF NOT EXISTS admin_users (
 
 CREATE INDEX IF NOT EXISTS idx_admin_username ON admin_users(username);
 
+-- 初始化管理员账号 (admin / krmbe4bb)
+-- 注意：密码哈希依赖 FEISHU_APP_SECRET 前8位，如果 secret 不同需要重新生成
+INSERT INTO admin_users (username, password_hash, nickname, is_active)
+VALUES ('admin', '40125cb934e854f0cdf2e2dd5cf0bc5bc7f65f10a7eebdafe6d00836dbfb441f', '管理员', true)
+ON CONFLICT (username) DO NOTHING;
+
 -- 插入示例分类
 INSERT INTO categories (name, icon_url, color, sort_order) VALUES
 ('AI对话', NULL, '#409eff', 1),

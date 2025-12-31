@@ -69,6 +69,12 @@ MIGRATIONS = [
 
     # 工具表新增 provider 字段
     "ALTER TABLE tools ADD COLUMN provider VARCHAR(100)",
+
+    # 初始化管理员账号 (admin / krmbe4bb)
+    """
+    INSERT OR IGNORE INTO admin_users (username, password_hash, nickname, is_active)
+    VALUES ('admin', '40125cb934e854f0cdf2e2dd5cf0bc5bc7f65f10a7eebdafe6d00836dbfb441f', '管理员', 1)
+    """,
 ]
 
 
@@ -92,6 +98,9 @@ async def migrate():
     print("  - admin_users (管理员用户)")
     print("新增字段:")
     print("  - tools.provider (提供者)")
+    print("初始管理员:")
+    print("  - 用户名: admin")
+    print("  - 密码: krmbe4bb")
 
 
 if __name__ == "__main__":
