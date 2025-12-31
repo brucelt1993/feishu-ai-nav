@@ -39,3 +39,4 @@ data/
 
 # uv
 uv.lock
+docker-compose.yml
