@@ -1,5 +1,6 @@
 """管理后台API"""
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -14,6 +15,7 @@ from ..schemas import (
     CategoryCreate, CategoryUpdate, CategoryResponse,
 )
 from ..services.stats_service import StatsService
+from ..services.import_service import import_tools, generate_template
 from ..config import get_settings
 from .auth import verify_token
 
@@ -303,3 +305,51 @@ async def get_trend(
     """获取使用趋势"""
     service = StatsService(db)
     return await service.get_trend(days=days)
+
+
+# ============ 导入导出 ============
+
+@router.post("/tools/import")
+async def import_tools_from_excel(
+    file: UploadFile = File(...),
+    update_existing: bool = True,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """
+    从Excel导入工具
+
+    - **file**: Excel文件 (.xlsx)
+    - **update_existing**: 是否更新已存在的工具（按名称匹配）
+    """
+    # 验证文件类型
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="请上传Excel文件 (.xlsx)")
+
+    try:
+        content = await file.read()
+        result = await import_tools(db, content, update_existing)
+
+        logger.info(
+            f"导入完成: 新增{result.created}, 更新{result.updated}, "
+            f"跳过{result.skipped}, 错误{len(result.errors)}"
+        )
+
+        return result.to_dict()
+
+    except Exception as e:
+        logger.error(f"导入失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/tools/import/template")
+async def download_import_template(
+    _: str = Depends(verify_admin),
+):
+    """下载导入模板"""
+    content = generate_template()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=tools_import_template.xlsx"},
+    )

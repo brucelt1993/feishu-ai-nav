@@ -5,6 +5,15 @@ from .category import (
     CategoryCreate, CategoryUpdate, CategoryResponse,
     CategoryWithChildren, CategoryTree
 )
+from .interaction import (
+    InteractionResponse, ToolInteractionStats,
+    FavoriteToolResponse, FavoriteListResponse
+)
+from .feedback import (
+    FeedbackType, FeedbackStatus,
+    FeedbackCreate, FeedbackResponse, FeedbackListResponse,
+    FeedbackUpdate, UserFeedbackResponse, UserFeedbackListResponse
+)
 
 __all__ = [
     "ToolCreate", "ToolUpdate", "ToolResponse", "ToolList",
@@ -12,4 +21,9 @@ __all__ = [
     "StatsOverview", "ToolStats", "UserStats", "TrendData",
     "CategoryCreate", "CategoryUpdate", "CategoryResponse",
     "CategoryWithChildren", "CategoryTree",
+    "InteractionResponse", "ToolInteractionStats",
+    "FavoriteToolResponse", "FavoriteListResponse",
+    "FeedbackType", "FeedbackStatus",
+    "FeedbackCreate", "FeedbackResponse", "FeedbackListResponse",
+    "FeedbackUpdate", "UserFeedbackResponse", "UserFeedbackListResponse",
 ]

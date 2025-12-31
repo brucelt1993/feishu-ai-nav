@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tools (
     description TEXT,
     icon_url VARCHAR(500),
     target_url VARCHAR(1000) NOT NULL,
+    provider VARCHAR(100),  -- 提供者（谁推荐了这个工具）
     category_id INT REFERENCES categories(id),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT true,
@@ -79,6 +80,64 @@ CREATE TABLE IF NOT EXISTS statistics_cache (
     created_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(stat_date, stat_type)
 );
+
+-- 用户收藏表
+CREATE TABLE IF NOT EXISTS user_favorites (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    tool_id INT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, tool_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON user_favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_tool ON user_favorites(tool_id);
+
+-- 用户点赞表
+CREATE TABLE IF NOT EXISTS user_likes (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    tool_id INT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, tool_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_likes_user ON user_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_likes_tool ON user_likes(tool_id);
+
+-- 工具反馈表
+CREATE TABLE IF NOT EXISTS tool_feedback (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    tool_id INT REFERENCES tools(id) ON DELETE SET NULL,
+    feedback_type VARCHAR(20) NOT NULL,
+    content TEXT,
+    tool_name VARCHAR(100),
+    tool_url VARCHAR(500),
+    status VARCHAR(20) DEFAULT 'pending',
+    admin_reply TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON tool_feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_type ON tool_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON tool_feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON tool_feedback(created_at);
+
+-- 管理员用户表
+CREATE TABLE IF NOT EXISTS admin_users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    nickname VARCHAR(50),
+    is_active BOOLEAN DEFAULT true,
+    last_login_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_username ON admin_users(username);
 
 -- 插入示例分类
 INSERT INTO categories (name, icon_url, color, sort_order) VALUES

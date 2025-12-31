@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
+import { useAdminStore } from '@/stores/admin'
 
 const api = axios.create({
   baseURL: '/api',
@@ -9,10 +10,20 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    const userStore = useUserStore()
-    const authHeader = userStore.getAuthHeader()
-    if (authHeader.Authorization) {
-      config.headers.Authorization = authHeader.Authorization
+    // 管理后台接口使用管理员token
+    if (config.url?.startsWith('/admin')) {
+      const adminStore = useAdminStore()
+      const authHeader = adminStore.getAuthHeader()
+      if (authHeader.Authorization) {
+        config.headers.Authorization = authHeader.Authorization
+      }
+    } else {
+      // 普通接口使用用户token
+      const userStore = useUserStore()
+      const authHeader = userStore.getAuthHeader()
+      if (authHeader.Authorization) {
+        config.headers.Authorization = authHeader.Authorization
+      }
     }
     return config
   },
@@ -40,13 +51,44 @@ export const categoriesApi = {
 
 // ============ 工具API ============
 export const toolsApi = {
-  getList: () => api.get('/tools'),
+  getList: (params = {}) => api.get('/tools', { params }),
+  search: (q, limit = 20) => api.get('/tools/search', { params: { q, limit } }),
   recordClick: (toolId) => api.post(`/tools/${toolId}/click`),
+  // 交互
+  getStats: (toolId) => api.get(`/tools/${toolId}/stats`),
+  like: (toolId) => api.post(`/tools/${toolId}/like`),
+  unlike: (toolId) => api.delete(`/tools/${toolId}/like`),
+  favorite: (toolId) => api.post(`/tools/${toolId}/favorite`),
+  unfavorite: (toolId) => api.delete(`/tools/${toolId}/favorite`),
+}
+
+// ============ 用户API ============
+export const userApi = {
+  getFavorites: () => api.get('/user/favorites'),
+  getFeedback: () => api.get('/user/feedback'),
+}
+
+// ============ 反馈API ============
+export const feedbackApi = {
+  create: (data) => api.post('/feedback', data),
+  getList: (params) => api.get('/admin/feedback', { params }),
+  getStats: () => api.get('/admin/feedback/stats'),
+  update: (id, data) => api.put(`/admin/feedback/${id}`, data),
 }
 
 // ============ 飞书API ============
 export const feishuApi = {
   getJsapiTicket: (url) => api.get('/feishu/jsapi_ticket', { params: { url } }),
+}
+
+// ============ 管理员认证API ============
+export const adminAuthApi = {
+  login: (username, password) => api.post('/admin/auth/login', { username, password }),
+  getMe: () => api.get('/admin/auth/me'),
+  changePassword: (oldPassword, newPassword) => api.put('/admin/auth/password', {
+    old_password: oldPassword,
+    new_password: newPassword
+  }),
 }
 
 // ============ 管理API ============
@@ -70,6 +112,16 @@ export const adminApi = {
   getToolStats: (days = 7, limit = 10) => api.get('/admin/stats/tools', { params: { days, limit } }),
   getUserStats: (days = 7, limit = 20) => api.get('/admin/stats/users', { params: { days, limit } }),
   getTrend: (days = 30) => api.get('/admin/stats/trend', { params: { days } }),
+
+  // 导入导出
+  importTools: (file, updateExisting = true) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/admin/tools/import?update_existing=${updateExisting}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  downloadTemplate: () => api.get('/admin/tools/import/template', { responseType: 'blob' }),
 }
 
 export default api

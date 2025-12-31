@@ -10,6 +10,7 @@ class ToolBase(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     target_url: str
+    provider: Optional[str] = None  # 提供者（谁推荐了这个工具）
     category_id: Optional[int] = None
     sort_order: int = 0
     is_active: bool = True
@@ -26,6 +27,7 @@ class ToolUpdate(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     target_url: Optional[str] = None
+    provider: Optional[str] = None
     category_id: Optional[int] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None

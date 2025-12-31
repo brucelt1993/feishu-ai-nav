@@ -63,6 +63,12 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    import sys
+
+    # Windows 上 reload 模式 Ctrl+C 问题的 workaround
+    if sys.platform == "win32":
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     uvicorn.run(
         "app.main:app",

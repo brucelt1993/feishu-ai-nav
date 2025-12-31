@@ -23,6 +23,8 @@ apscheduler>=3.10.4
 # 工具
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
+cachetools>=5.3.0       # 内存缓存（防刷数）
+openpyxl>=3.1.0         # Excel读写
 
 # PostgreSQL驱动（生产环境用，Windows需要VC++编译工具）
 # 如需PostgreSQL支持，取消下行注释并安装：

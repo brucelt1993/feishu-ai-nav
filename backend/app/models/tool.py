@@ -14,6 +14,7 @@ class Tool(Base):
     description = Column(Text)
     icon_url = Column(String(500))
     target_url = Column(String(1000), nullable=False)
+    provider = Column(String(100))  # 提供者（谁推荐了这个工具）
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     sort_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)

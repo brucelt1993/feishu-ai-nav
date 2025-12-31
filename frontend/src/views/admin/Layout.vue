@@ -28,6 +28,10 @@
           <el-icon><TrendCharts /></el-icon>
           <span>统计分析</span>
         </el-menu-item>
+        <el-menu-item index="/admin/feedback">
+          <el-icon><ChatLineSquare /></el-icon>
+          <span>反馈管理</span>
+        </el-menu-item>
       </el-menu>
 
       <div class="sidebar-footer">
@@ -42,11 +46,19 @@
     <main class="main-content">
       <header class="content-header">
         <h2 class="page-title">{{ pageTitle }}</h2>
-        <div class="user-info" v-if="userStore.isLoggedIn">
-          <el-avatar :src="userStore.userAvatar" :size="32">
-            {{ userStore.userName.charAt(0) }}
-          </el-avatar>
-          <span>{{ userStore.userName }}</span>
+        <div class="admin-info" v-if="adminStore.isLoggedIn">
+          <span class="admin-name">{{ adminStore.adminInfo?.nickname || adminStore.adminInfo?.username }}</span>
+          <el-dropdown @command="handleCommand">
+            <el-button text>
+              <el-icon><Setting /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="password">修改密码</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
@@ -58,14 +70,16 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
-import { DataBoard, Grid, Tools, TrendCharts, Back } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useAdminStore } from '@/stores/admin'
+import { adminAuthApi } from '@/api'
+import { DataBoard, Grid, Tools, TrendCharts, Back, ChatLineSquare, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
+const adminStore = useAdminStore()
 
 const activeMenu = computed(() => route.path)
 
@@ -75,6 +89,51 @@ const pageTitle = computed(() => {
 
 function goHome() {
   router.push('/')
+}
+
+function handleCommand(command) {
+  if (command === 'logout') {
+    handleLogout()
+  } else if (command === 'password') {
+    handleChangePassword()
+  }
+}
+
+function handleLogout() {
+  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+  }).then(() => {
+    adminStore.logout()
+    router.push('/admin/login')
+    ElMessage.success('已退出登录')
+  }).catch(() => {})
+}
+
+async function handleChangePassword() {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新密码', '修改密码', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /^.{6,}$/,
+      inputErrorMessage: '密码至少6位',
+      inputType: 'password',
+    })
+
+    const { value: oldPassword } = await ElMessageBox.prompt('请输入原密码验证', '验证身份', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputType: 'password',
+    })
+
+    await adminAuthApi.changePassword(oldPassword, value)
+    ElMessage.success('密码修改成功')
+  } catch (e) {
+    if (e !== 'cancel' && e.response?.data?.detail) {
+      ElMessage.error(e.response.data.detail)
+    }
+  }
 }
 </script>
 
@@ -136,12 +195,16 @@ function goHome() {
   color: #303133;
 }
 
-.user-info {
+.admin-info {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
   color: #606266;
+}
+
+.admin-name {
+  font-weight: 500;
 }
 
 .content-body {

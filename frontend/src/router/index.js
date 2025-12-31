@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAdminStore } from '@/stores/admin'
 
 const routes = [
   {
@@ -6,6 +7,18 @@ const routes = [
     name: 'Home',
     component: () => import('@/views/Home.vue'),
     meta: { title: 'AI工具导航' }
+  },
+  {
+    path: '/favorites',
+    name: 'Favorites',
+    component: () => import('@/views/Favorites.vue'),
+    meta: { title: '我的收藏' }
+  },
+  {
+    path: '/admin/login',
+    name: 'AdminLogin',
+    component: () => import('@/views/admin/Login.vue'),
+    meta: { title: '管理员登录' }
   },
   {
     path: '/admin',
@@ -36,6 +49,12 @@ const routes = [
         name: 'Stats',
         component: () => import('@/views/admin/Stats.vue'),
         meta: { title: '统计分析' }
+      },
+      {
+        path: 'feedback',
+        name: 'AdminFeedback',
+        component: () => import('@/views/admin/Feedback.vue'),
+        meta: { title: '反馈管理' }
       }
     ]
   }
@@ -49,6 +68,16 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title || 'AI工具导航'
+
+  // 管理后台需要登录
+  if (to.meta.requiresAdmin) {
+    const adminStore = useAdminStore()
+    if (!adminStore.isLoggedIn) {
+      next({ name: 'AdminLogin', query: { redirect: to.fullPath } })
+      return
+    }
+  }
+
   next()
 })
 

@@ -6,6 +6,14 @@
         <el-icon><Plus /></el-icon>
         添加工具
       </el-button>
+      <el-button @click="showImportDialog">
+        <el-icon><Upload /></el-icon>
+        批量导入
+      </el-button>
+      <el-button text @click="downloadTemplate">
+        <el-icon><Download /></el-icon>
+        下载模板
+      </el-button>
       <el-select
         v-model="filterCategoryId"
         placeholder="筛选分类"
@@ -40,6 +48,7 @@
         </template>
       </el-table-column>
       <el-table-column prop="name" label="名称" width="150" />
+      <el-table-column prop="provider" label="提供者" width="100" />
       <el-table-column prop="description" label="描述" show-overflow-tooltip />
       <el-table-column label="分类" width="120">
         <template #default="{ row }">
@@ -115,6 +124,9 @@
         <el-form-item label="跳转链接" prop="target_url">
           <el-input v-model="formData.target_url" placeholder="请输入目标URL" />
         </el-form-item>
+        <el-form-item label="提供者" prop="provider">
+          <el-input v-model="formData.provider" placeholder="谁推荐了这个工具？" />
+        </el-form-item>
         <el-form-item label="分类" prop="category_id">
           <el-cascader
             v-model="categoryPath"
@@ -140,13 +152,71 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入弹窗 -->
+    <el-dialog v-model="importDialogVisible" title="批量导入工具" width="500px">
+      <el-upload
+        ref="uploadRef"
+        drag
+        :auto-upload="false"
+        :limit="1"
+        accept=".xlsx,.xls"
+        :on-change="handleFileChange"
+        :on-exceed="handleExceed"
+      >
+        <el-icon class="el-icon--upload"><Upload /></el-icon>
+        <div class="el-upload__text">
+          拖拽文件到此处，或 <em>点击上传</em>
+        </div>
+        <template #tip>
+          <div class="el-upload__tip">
+            仅支持 .xlsx 格式，
+            <el-link type="primary" @click="downloadTemplate">下载模板</el-link>
+          </div>
+        </template>
+      </el-upload>
+
+      <el-checkbox v-model="importUpdateExisting" style="margin-top: 16px">
+        更新已存在的工具（按名称匹配）
+      </el-checkbox>
+
+      <div v-if="importResult" class="import-result">
+        <el-alert
+          :type="importResult.errors.length > 0 ? 'warning' : 'success'"
+          :closable="false"
+        >
+          <template #title>
+            导入完成：新增 {{ importResult.created }}，
+            更新 {{ importResult.updated }}，
+            跳过 {{ importResult.skipped }}
+          </template>
+          <template #default v-if="importResult.errors.length > 0">
+            <div class="import-errors">
+              <div v-for="(err, i) in importResult.errors" :key="i">{{ err }}</div>
+            </div>
+          </template>
+        </el-alert>
+      </div>
+
+      <template #footer>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button
+          type="primary"
+          @click="handleImport"
+          :loading="importing"
+          :disabled="!importFile"
+        >
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Upload, Download } from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
 
 const loading = ref(false)
@@ -164,11 +234,20 @@ const editId = ref(null)
 const formRef = ref(null)
 const categoryPath = ref(null)
 
+// 导入相关
+const importDialogVisible = ref(false)
+const importing = ref(false)
+const importFile = ref(null)
+const importUpdateExisting = ref(true)
+const importResult = ref(null)
+const uploadRef = ref(null)
+
 const formData = reactive({
   name: '',
   description: '',
   icon_url: '',
   target_url: '',
+  provider: '',
   category_id: null,
   sort_order: 0,
   is_active: true
@@ -247,6 +326,7 @@ function handleEdit(row) {
     description: row.description || '',
     icon_url: row.icon_url || '',
     target_url: row.target_url,
+    provider: row.provider || '',
     category_id: row.category_id,
     sort_order: row.sort_order || 0,
     is_active: row.is_active
@@ -297,11 +377,63 @@ function resetForm() {
     description: '',
     icon_url: '',
     target_url: '',
+    provider: '',
     category_id: null,
     sort_order: 0,
     is_active: true
   })
   categoryPath.value = null
+}
+
+// ============ 导入相关 ============
+
+function showImportDialog() {
+  importFile.value = null
+  importResult.value = null
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
+  importDialogVisible.value = true
+}
+
+function handleFileChange(file) {
+  importFile.value = file.raw
+}
+
+function handleExceed() {
+  ElMessage.warning('只能上传一个文件，请先删除已选文件')
+}
+
+async function handleImport() {
+  if (!importFile.value) return
+
+  try {
+    importing.value = true
+    const result = await adminApi.importTools(importFile.value, importUpdateExisting.value)
+    importResult.value = result
+    ElMessage.success(`导入完成：新增 ${result.created}，更新 ${result.updated}`)
+    loadTools()
+  } catch (error) {
+    console.error('导入失败:', error)
+    ElMessage.error(error.response?.data?.detail || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+async function downloadTemplate() {
+  try {
+    const blob = await adminApi.downloadTemplate()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'tools_import_template.xlsx'
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载模板失败:', error)
+    ElMessage.error('下载模板失败')
+  }
 }
 </script>
 
@@ -327,5 +459,17 @@ function resetForm() {
 .no-category {
   color: #c0c4cc;
   font-size: 13px;
+}
+
+.import-result {
+  margin-top: 16px;
+}
+
+.import-errors {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #e6a23c;
+  max-height: 150px;
+  overflow-y: auto;
 }
 </style>
