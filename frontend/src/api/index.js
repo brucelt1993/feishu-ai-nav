@@ -105,6 +105,7 @@ export const adminApi = {
   }),
   createTool: (data) => api.post('/admin/tools', data),
   updateTool: (id, data) => api.put(`/admin/tools/${id}`, data),
+  previewDeleteTool: (id) => api.get(`/admin/tools/${id}/delete-preview`),
   deleteTool: (id) => api.delete(`/admin/tools/${id}`),
 
   // 统计

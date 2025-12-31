@@ -71,14 +71,9 @@
           <el-button type="primary" text size="small" @click="handleEdit(row)">
             编辑
           </el-button>
-          <el-popconfirm
-            title="确定删除该工具？"
-            @confirm="handleDelete(row.id)"
-          >
-            <template #reference>
-              <el-button type="danger" text size="small">删除</el-button>
-            </template>
-          </el-popconfirm>
+          <el-button type="danger" text size="small" @click="handleDeleteClick(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -215,7 +210,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download } from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
 
@@ -357,6 +352,37 @@ async function handleSubmit() {
     }
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleDeleteClick(row) {
+  try {
+    // 先获取删除影响预览
+    const preview = await adminApi.previewDeleteTool(row.id)
+
+    let message = `确定删除工具 <strong>${row.name}</strong> ？`
+    if (preview.total > 0) {
+      message += `<br/><br/><span style="color: #E6A23C;">⚠️ 将同时删除以下关联数据：</span>`
+      message += `<ul style="margin: 8px 0 0 20px; padding: 0;">`
+      if (preview.favorites > 0) message += `<li>${preview.favorites} 条收藏记录</li>`
+      if (preview.likes > 0) message += `<li>${preview.likes} 条点赞记录</li>`
+      if (preview.clicks > 0) message += `<li>${preview.clicks} 条点击记录</li>`
+      message += `</ul>`
+    }
+
+    await ElMessageBox.confirm(message, '删除确认', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      dangerouslyUseHTMLString: true,
+    })
+
+    await handleDelete(row.id)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除预检失败:', error)
+      ElMessage.error('操作失败')
+    }
   }
 }
 

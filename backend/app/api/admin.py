@@ -2,13 +2,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 import logging
 
 from ..database import get_db
-from ..models import Tool, User, Category
+from ..models import Tool, User, Category, UserFavorite, UserLike, ClickLog
 from ..schemas import (
     ToolCreate, ToolUpdate, ToolResponse, ToolList,
     StatsOverview, ToolStats, UserStats,
@@ -240,6 +240,39 @@ async def update_tool(
     return ToolResponse.model_validate(tool)
 
 
+@router.get("/tools/{tool_id}/delete-preview")
+async def preview_delete_tool(
+    tool_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """预览删除工具的影响范围"""
+    result = await db.execute(select(Tool).where(Tool.id == tool_id))
+    tool = result.scalar_one_or_none()
+
+    if not tool:
+        raise HTTPException(status_code=404, detail="工具不存在")
+
+    # 统计关联数据
+    fav_count = (await db.execute(
+        select(func.count()).where(UserFavorite.tool_id == tool_id)
+    )).scalar() or 0
+    like_count = (await db.execute(
+        select(func.count()).where(UserLike.tool_id == tool_id)
+    )).scalar() or 0
+    click_count = (await db.execute(
+        select(func.count()).where(ClickLog.tool_id == tool_id)
+    )).scalar() or 0
+
+    return {
+        "tool_name": tool.name,
+        "favorites": fav_count,
+        "likes": like_count,
+        "clicks": click_count,
+        "total": fav_count + like_count + click_count,
+    }
+
+
 @router.delete("/tools/{tool_id}")
 async def delete_tool(
     tool_id: int,
@@ -253,10 +286,20 @@ async def delete_tool(
     if not tool:
         raise HTTPException(status_code=404, detail="工具不存在")
 
+    # 先删除关联数据（收藏、点赞、点击记录）
+    fav_result = await db.execute(delete(UserFavorite).where(UserFavorite.tool_id == tool_id))
+    like_result = await db.execute(delete(UserLike).where(UserLike.tool_id == tool_id))
+    click_result = await db.execute(delete(ClickLog).where(ClickLog.tool_id == tool_id))
+
     await db.delete(tool)
     await db.commit()
 
-    logger.info(f"删除工具: {tool.name}")
+    logger.info(
+        f"删除工具: {tool.name} (ID={tool_id}), "
+        f"同时清理 {fav_result.rowcount} 条收藏, "
+        f"{like_result.rowcount} 条点赞, "
+        f"{click_result.rowcount} 条点击记录"
+    )
     return {"success": True}
 
 
