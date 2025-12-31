@@ -47,14 +47,6 @@
           <el-icon><Grid /></el-icon>
           <span>全局</span>
         </button>
-        <button
-          class="mode-tab"
-          :class="{ active: currentMode === 'search' }"
-          @click="setMode('search')"
-        >
-          <el-icon><Search /></el-icon>
-          <span>搜索</span>
-        </button>
       </div>
 
       <!-- 搜索框（目录/全局/搜索模式都显示） -->
@@ -128,7 +120,17 @@
 
       <!-- 右侧工具列表 -->
       <main class="content">
-        <div v-if="loading" class="content-loading">
+        <!-- 未登录且不允许匿名访问时显示登录提示 -->
+        <div v-if="!canViewTools" class="login-prompt">
+          <el-empty description="请先登录后查看工具列表">
+            <template #image>
+              <el-icon :size="64" color="#c0c4cc"><User /></el-icon>
+            </template>
+            <el-button type="primary" @click="handleLogin">立即登录</el-button>
+          </el-empty>
+        </div>
+
+        <div v-else-if="loading" class="content-loading">
           <el-skeleton :rows="6" animated />
         </div>
 
@@ -220,7 +222,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Collection, Plus, Menu, Grid, Search } from '@element-plus/icons-vue'
+import { Collection, Plus, Menu, Grid, Search, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { categoriesApi, toolsApi } from '@/api'
 import { initFeishuSDK, feishuLogin, openInFeishu, isInFeishu } from '@/utils/feishu'
@@ -230,6 +232,10 @@ import WantToolDialog from '@/components/WantToolDialog.vue'
 
 const userStore = useUserStore()
 const { currentMode, searchKeyword, sortBy, setMode, setSearchKeyword, clearSearch } = useNavMode()
+
+// 是否允许匿名访问（需要重启 Vite 才能生效）
+const allowAnonymous = import.meta.env.VITE_ALLOW_ANONYMOUS === 'true'
+const canViewTools = computed(() => allowAnonymous || userStore.isLoggedIn)
 
 const categories = ref([])
 const loading = ref(true)
@@ -625,6 +631,15 @@ async function handleToolClick(tool) {
   background: #fff;
   border-radius: 8px;
   padding: 60px;
+}
+
+.login-prompt {
+  background: #fff;
+  border-radius: 8px;
+  padding: 80px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tool-grid {

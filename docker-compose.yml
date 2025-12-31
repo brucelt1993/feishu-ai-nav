@@ -1,6 +1,10 @@
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_VCONSOLE=${VITE_VCONSOLE:-false}
+        - VITE_ALLOW_ANONYMOUS=${VITE_ALLOW_ANONYMOUS:-false}
     ports:
       - "3008:80"
     depends_on:

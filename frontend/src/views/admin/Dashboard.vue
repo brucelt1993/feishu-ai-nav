@@ -61,7 +61,7 @@
       <h3 class="chart-title">活跃用户 TOP20</h3>
       <el-table :data="userStats" stripe>
         <el-table-column type="index" label="#" width="60" />
-        <el-table-column prop="name" label="用户" />
+        <el-table-column prop="user_name" label="用户" />
         <el-table-column prop="click_count" label="点击次数" width="120" />
         <el-table-column prop="last_click" label="最后访问" width="180" />
       </el-table>
@@ -175,7 +175,7 @@ function renderToolChart(data) {
     xAxis: { type: 'value' },
     yAxis: {
       type: 'category',
-      data: data.map(d => d.name).reverse()
+      data: data.map(d => d.tool_name).reverse()
     },
     series: [{
       type: 'bar',

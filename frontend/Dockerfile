@@ -3,6 +3,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build arguments (Vite 环境变量)
+ARG VITE_VCONSOLE=false
+ARG VITE_ALLOW_ANONYMOUS=false
+
+# Set as environment variables for build
+ENV VITE_VCONSOLE=$VITE_VCONSOLE
+ENV VITE_ALLOW_ANONYMOUS=$VITE_ALLOW_ANONYMOUS
+
 # Copy package files
 COPY package.json ./
 

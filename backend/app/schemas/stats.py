@@ -8,8 +8,8 @@ class StatsOverview(BaseModel):
     """统计概览"""
     today_pv: int
     today_uv: int
-    total_pv: int
-    total_uv: int
+    total_clicks: int  # 总点击数
+    total_users: int   # 总用户数
     total_tools: int
     new_users_today: int
 
@@ -28,6 +28,7 @@ class UserStats(BaseModel):
     user_name: Optional[str]
     avatar_url: Optional[str]
     click_count: int
+    last_click: Optional[str]  # 最后点击时间
 
 
 class TrendData(BaseModel):

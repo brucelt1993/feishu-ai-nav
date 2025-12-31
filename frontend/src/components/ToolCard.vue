@@ -33,6 +33,15 @@
         <span>{{ stats.is_favorited ? '已收藏' : '收藏' }}</span>
       </button>
       <button
+        class="action-btn want-btn"
+        @click="handleWant"
+        :disabled="!isLoggedIn"
+        :title="isLoggedIn ? '推荐新工具' : '请先登录'"
+      >
+        <el-icon><Promotion /></el-icon>
+        <span>想要</span>
+      </button>
+      <button
         class="action-btn feedback-btn"
         @click="handleFeedback"
         :disabled="!isLoggedIn"
@@ -43,21 +52,28 @@
       </button>
     </div>
 
-    <!-- 反馈弹窗 -->
-    <FeedbackDialog
-      v-model="showFeedbackDialog"
-      :tool="tool"
-      @success="handleFeedbackSuccess"
-    />
+    <!-- 弹窗（使用 Teleport 避免定位问题） -->
+    <Teleport to="body">
+      <FeedbackDialog
+        v-model="showFeedbackDialog"
+        :tool="tool"
+        @success="handleFeedbackSuccess"
+      />
+      <WantToolDialog
+        v-model="showWantDialog"
+        @success="handleWantSuccess"
+      />
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { ArrowRight, Star, StarFilled, Collection, CollectionTag, ChatLineSquare } from '@element-plus/icons-vue'
+import { ArrowRight, Star, StarFilled, Collection, CollectionTag, ChatLineSquare, Promotion } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { toolsApi } from '@/api'
 import FeedbackDialog from './FeedbackDialog.vue'
+import WantToolDialog from './WantToolDialog.vue'
 
 const props = defineProps({
   tool: {
@@ -75,6 +91,7 @@ const emit = defineEmits(['click', 'statsChange'])
 const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const showFeedbackDialog = ref(false)
+const showWantDialog = ref(false)
 
 const stats = ref({
   like_count: 0,
@@ -143,8 +160,17 @@ function handleFeedback() {
   showFeedbackDialog.value = true
 }
 
+function handleWant() {
+  if (!isLoggedIn.value) return
+  showWantDialog.value = true
+}
+
 function handleFeedbackSuccess() {
-  // 反馈成功后的回调，可以用于刷新数据等
+  // 反馈成功后的回调
+}
+
+function handleWantSuccess() {
+  // 想要工具提交成功后的回调
 }
 </script>
 
@@ -259,6 +285,11 @@ function handleFeedbackSuccess() {
 
 .action-btn .el-icon {
   font-size: 16px;
+}
+
+.want-btn:hover:not(:disabled) {
+  background: #fdf6ec;
+  color: #e6a23c;
 }
 
 .feedback-btn:hover:not(:disabled) {

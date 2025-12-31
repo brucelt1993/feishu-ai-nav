@@ -22,7 +22,7 @@
         <h3 class="card-title">工具使用排行</h3>
         <el-table :data="toolStats" stripe size="small">
           <el-table-column type="index" label="#" width="50" />
-          <el-table-column prop="name" label="工具名称" />
+          <el-table-column prop="tool_name" label="工具名称" />
           <el-table-column prop="click_count" label="点击次数" width="100" />
           <el-table-column label="占比" width="120">
             <template #default="{ row }">
@@ -40,7 +40,7 @@
         <h3 class="card-title">用户活跃排行</h3>
         <el-table :data="userStats" stripe size="small">
           <el-table-column type="index" label="#" width="50" />
-          <el-table-column prop="name" label="用户" />
+          <el-table-column prop="user_name" label="用户" />
           <el-table-column prop="click_count" label="点击次数" width="100" />
           <el-table-column prop="last_click" label="最后访问" width="160" />
         </el-table>

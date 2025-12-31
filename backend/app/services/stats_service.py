@@ -52,8 +52,8 @@ class StatsService:
         return {
             "today_pv": today_pv,
             "today_uv": today_uv,
-            "total_pv": total_pv,
-            "total_uv": total_uv,
+            "total_clicks": total_pv,  # 总点击数
+            "total_users": total_uv,   # 总用户数
             "total_tools": total_tools,
             "new_users_today": new_users_today,
         }
@@ -99,6 +99,7 @@ class StatsService:
                 User.name,
                 User.avatar_url,
                 func.count(ClickLog.id).label("click_count"),
+                func.max(ClickLog.clicked_at).label("last_click"),
             )
             .join(ClickLog, User.id == ClickLog.user_id)
             .where(ClickLog.clicked_at >= start_date)
@@ -110,12 +111,21 @@ class StatsService:
         result = await self.db.execute(query)
         rows = result.all()
 
+        def format_last_click(last_click):
+            if not last_click:
+                return None
+            # SQLite 返回字符串，PostgreSQL 返回 datetime 对象
+            if isinstance(last_click, str):
+                return last_click[:16]  # "2024-01-01 12:00:00" -> "2024-01-01 12:00"
+            return last_click.strftime("%Y-%m-%d %H:%M")
+
         return [
             {
                 "user_id": row.id,
                 "user_name": row.name,
                 "avatar_url": row.avatar_url,
                 "click_count": row.click_count,
+                "last_click": format_last_click(row.last_click),
             }
             for row in rows
         ]
@@ -140,7 +150,8 @@ class StatsService:
 
         return [
             {
-                "date": row.date.isoformat(),
+                # SQLite 返回字符串，PostgreSQL 返回 date 对象
+                "date": row.date if isinstance(row.date, str) else row.date.isoformat(),
                 "pv": row.pv,
                 "uv": row.uv,
             }
