@@ -159,37 +159,69 @@ class StatsService:
         ]
 
     async def get_category_distribution(self) -> list[dict]:
-        """获取分类使用分布"""
+        """获取分类使用分布（按一级分类聚合，包含其子分类的工具点击）"""
         from ..models import Category
+        from sqlalchemy import or_, case
+        from sqlalchemy.orm import aliased
 
+        # 先查出所有一级分类
+        parent_cats_query = select(Category).where(Category.parent_id.is_(None))
+        parent_cats_result = await self.db.execute(parent_cats_query)
+        parent_cats = {cat.id: cat for cat in parent_cats_result.scalars().all()}
+
+        if not parent_cats:
+            return []
+
+        # 查询所有分类的点击统计（包括一级和二级）
+        cat_alias = aliased(Category)
         query = (
             select(
                 Category.id,
-                Category.name,
-                Category.color,
+                Category.parent_id,
                 func.count(ClickLog.id).label("click_count"),
                 func.count(distinct(ClickLog.user_id)).label("unique_users"),
             )
             .join(Tool, Category.id == Tool.category_id)
             .join(ClickLog, Tool.id == ClickLog.tool_id)
-            .where(Category.parent_id.is_(None))  # 只统计一级分类
-            .group_by(Category.id, Category.name, Category.color)
-            .order_by(func.count(ClickLog.id).desc())
+            .group_by(Category.id, Category.parent_id)
         )
 
         result = await self.db.execute(query)
         rows = result.all()
 
-        return [
-            {
-                "category_id": row.id,
-                "category_name": row.name,
-                "color": row.color or "#667eea",
-                "click_count": row.click_count,
-                "unique_users": row.unique_users,
-            }
-            for row in rows
-        ]
+        # 按一级分类聚合
+        aggregated = {}
+        for row in rows:
+            # 确定归属的一级分类
+            if row.parent_id is None:
+                # 本身就是一级分类
+                parent_id = row.id
+            else:
+                # 二级分类，归属到其父分类
+                parent_id = row.parent_id
+
+            if parent_id not in aggregated:
+                aggregated[parent_id] = {"click_count": 0, "unique_users": 0}
+
+            aggregated[parent_id]["click_count"] += row.click_count
+            aggregated[parent_id]["unique_users"] += row.unique_users
+
+        # 构建返回结果
+        result_list = []
+        for parent_id, stats in aggregated.items():
+            if parent_id in parent_cats:
+                cat = parent_cats[parent_id]
+                result_list.append({
+                    "category_id": cat.id,
+                    "category_name": cat.name,
+                    "color": cat.color or "#667eea",
+                    "click_count": stats["click_count"],
+                    "unique_users": stats["unique_users"],
+                })
+
+        # 按点击数排序
+        result_list.sort(key=lambda x: x["click_count"], reverse=True)
+        return result_list
 
     async def get_tool_detail_stats(self, tool_id: int, days: int = 30) -> dict:
         """获取单个工具的详细统计"""

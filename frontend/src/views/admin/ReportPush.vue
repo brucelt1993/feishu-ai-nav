@@ -14,13 +14,32 @@
           <span class="setting-desc">启用后每天按设定时间自动推送</span>
         </el-form-item>
 
-        <el-form-item label="推送时间" v-if="pushSettings.enabled">
-          <el-time-picker
-            v-model="pushSettings.pushTime"
-            format="HH:mm"
-            placeholder="选择推送时间"
-          />
-        </el-form-item>
+        <template v-if="pushSettings.enabled">
+          <el-form-item label="推送时间">
+            <el-time-picker
+              v-model="pushSettings.pushTime"
+              format="HH:mm"
+              placeholder="选择推送时间"
+            />
+          </el-form-item>
+
+          <el-form-item label="报表类型">
+            <el-checkbox-group v-model="pushSettings.reportTypes">
+              <el-checkbox label="overview">数据概览</el-checkbox>
+              <el-checkbox label="tools">工具排行</el-checkbox>
+              <el-checkbox label="users">用户统计</el-checkbox>
+              <el-checkbox label="trend">使用趋势</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+
+          <el-form-item label="统计周期">
+            <el-radio-group v-model="pushSettings.days">
+              <el-radio :label="1">今天</el-radio>
+              <el-radio :label="7">近7天</el-radio>
+              <el-radio :label="30">近30天</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </template>
 
         <el-form-item>
           <el-button type="primary" @click="saveSettings" :loading="saving">
@@ -221,7 +240,7 @@
             <h4>工具排行 TOP10</h4>
             <el-table :data="previewData.tools" size="small">
               <el-table-column type="index" label="排名" width="60" />
-              <el-table-column prop="name" label="工具名称" />
+              <el-table-column prop="tool_name" label="工具名称" />
               <el-table-column prop="click_count" label="点击次数" width="100" />
             </el-table>
           </div>
@@ -231,8 +250,18 @@
             <h4>活跃用户 TOP10</h4>
             <el-table :data="previewData.users" size="small">
               <el-table-column type="index" label="排名" width="60" />
-              <el-table-column prop="name" label="用户名" />
+              <el-table-column prop="user_name" label="用户名" />
               <el-table-column prop="click_count" label="访问次数" width="100" />
+            </el-table>
+          </div>
+
+          <!-- 使用趋势 -->
+          <div class="preview-section" v-if="previewData.trend?.length">
+            <h4>使用趋势</h4>
+            <el-table :data="previewData.trend" size="small" max-height="300">
+              <el-table-column prop="date" label="日期" width="120" />
+              <el-table-column prop="pv" label="PV" width="100" />
+              <el-table-column prop="uv" label="UV" width="100" />
             </el-table>
           </div>
         </div>
@@ -253,7 +282,9 @@ import { adminApi } from '@/api'
 // 推送设置
 const pushSettings = reactive({
   enabled: false,
-  pushTime: null
+  pushTime: null,
+  reportTypes: ['overview', 'tools'],
+  days: 7
 })
 const saving = ref(false)
 
@@ -305,6 +336,8 @@ async function loadSettings() {
   try {
     const data = await adminApi.getReportPushSettings()
     pushSettings.enabled = data.enabled
+    pushSettings.reportTypes = data.report_types || ['overview', 'tools']
+    pushSettings.days = data.days || 7
     if (data.push_time) {
       const [hour, minute] = data.push_time.split(':')
       pushSettings.pushTime = new Date()
@@ -326,7 +359,9 @@ async function saveSettings() {
     }
     await adminApi.saveReportPushSettings({
       enabled: pushSettings.enabled,
-      push_time: pushTime
+      push_time: pushTime,
+      report_types: pushSettings.reportTypes,
+      days: pushSettings.days
     })
     ElMessage.success('设置已保存')
   } catch (e) {

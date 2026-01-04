@@ -23,6 +23,8 @@ router = APIRouter(prefix="/admin/report-push", tags=["报表推送"])
 class SettingsUpdate(BaseModel):
     enabled: bool = False
     push_time: Optional[str] = None
+    report_types: Optional[List[str]] = None
+    days: Optional[int] = 7
 
 
 class RecipientCreate(BaseModel):
@@ -56,11 +58,18 @@ async def get_settings(
     settings = result.scalar_one_or_none()
 
     if not settings:
-        return {"enabled": False, "push_time": None}
+        return {
+            "enabled": False,
+            "push_time": None,
+            "report_types": ["overview", "tools"],
+            "days": 7
+        }
 
     return {
         "enabled": settings.enabled,
-        "push_time": settings.push_time
+        "push_time": settings.push_time,
+        "report_types": settings.report_types.split(",") if settings.report_types else ["overview", "tools"],
+        "days": settings.days or 7
     }
 
 
@@ -74,12 +83,21 @@ async def update_settings(
     result = await db.execute(select(ReportPushSettings).limit(1))
     settings = result.scalar_one_or_none()
 
+    report_types_str = ",".join(data.report_types) if data.report_types else "overview,tools"
+
     if not settings:
-        settings = ReportPushSettings(enabled=data.enabled, push_time=data.push_time)
+        settings = ReportPushSettings(
+            enabled=data.enabled,
+            push_time=data.push_time,
+            report_types=report_types_str,
+            days=data.days or 7
+        )
         db.add(settings)
     else:
         settings.enabled = data.enabled
         settings.push_time = data.push_time
+        settings.report_types = report_types_str
+        settings.days = data.days or 7
         settings.updated_at = datetime.utcnow()
 
     await db.commit()
@@ -263,10 +281,13 @@ async def push_report(
     result = await db.execute(
         select(ReportRecipient).where(ReportRecipient.is_active == True)
     )
-    recipients = result.scalars().all()
+    recipient_objs = result.scalars().all()
 
-    if not recipients:
+    if not recipient_objs:
         raise HTTPException(status_code=400, detail="没有可用的推送接收人")
+
+    # 转换为字典，避免后台任务中 session 关闭后无法访问 ORM 属性
+    recipients = [{"name": r.name, "email": r.email} for r in recipient_objs]
 
     # 获取报表数据
     stats_service = StatsService(db)
@@ -332,7 +353,7 @@ async def push_feishu_report(history_id: int, recipients: list, report_data: dic
             for recipient in recipients:
                 try:
                     # 通过邮箱获取用户open_id
-                    user_info = await feishu_service.get_user_by_email(recipient.email)
+                    user_info = await feishu_service.get_user_by_email(recipient["email"])
                     if user_info and user_info.get("open_id"):
                         await feishu_service.send_card_message(
                             user_info["open_id"],
@@ -341,10 +362,10 @@ async def push_feishu_report(history_id: int, recipients: list, report_data: dic
                         )
                         success_count += 1
                     else:
-                        errors.append(f"{recipient.name}: 未找到飞书用户")
+                        errors.append(f"{recipient['name']}: 未找到飞书用户")
                 except Exception as e:
-                    errors.append(f"{recipient.name}: {str(e)}")
-                    logger.error(f"推送给 {recipient.name} 失败: {e}")
+                    errors.append(f"{recipient['name']}: {str(e)}")
+                    logger.error(f"推送给 {recipient['name']} 失败: {e}")
 
             # 更新历史记录
             result = await db.execute(
@@ -392,7 +413,7 @@ async def push_email_report(history_id: int, recipients: list, report_data: dict
                 try:
                     # 通过飞书邮件API发送
                     await feishu_service.send_email_with_attachment(
-                        to_email=recipient.email,
+                        to_email=recipient["email"],
                         subject=f"AI工具导航统计报表 - 近{days}天",
                         content="请查看附件中的统计报表。",
                         attachment_name=f"report_{datetime.now().strftime('%Y%m%d')}.xlsx",
@@ -400,8 +421,8 @@ async def push_email_report(history_id: int, recipients: list, report_data: dict
                     )
                     success_count += 1
                 except Exception as e:
-                    errors.append(f"{recipient.name}: {str(e)}")
-                    logger.error(f"发送邮件给 {recipient.name} 失败: {e}")
+                    errors.append(f"{recipient['name']}: {str(e)}")
+                    logger.error(f"发送邮件给 {recipient['name']} 失败: {e}")
 
             # 更新历史记录
             result = await db.execute(
@@ -462,7 +483,7 @@ def build_report_card(report_data: dict, days: int) -> dict:
     if "tools" in report_data and report_data["tools"]:
         tools = report_data["tools"][:5]
         tool_lines = "\n".join([
-            f"{i+1}. {t['name']}: {t['click_count']}次"
+            f"{i+1}. {t['tool_name']}: {t['click_count']}次"
             for i, t in enumerate(tools)
         ])
         elements.append({
@@ -474,7 +495,7 @@ def build_report_card(report_data: dict, days: int) -> dict:
     if "users" in report_data and report_data["users"]:
         users = report_data["users"][:5]
         user_lines = "\n".join([
-            f"{i+1}. {u['name']}: {u['click_count']}次"
+            f"{i+1}. {u['user_name']}: {u['click_count']}次"
             for i, u in enumerate(users)
         ])
         elements.append({
@@ -538,7 +559,7 @@ def generate_report_excel(report_data: dict, days: int) -> bytes:
 
         for row, tool in enumerate(report_data["tools"], 2):
             ws.cell(row=row, column=1, value=row - 1)
-            ws.cell(row=row, column=2, value=tool.get("name", ""))
+            ws.cell(row=row, column=2, value=tool.get("tool_name", ""))
             ws.cell(row=row, column=3, value=tool.get("click_count", 0))
 
     # 用户统计Sheet
@@ -553,7 +574,7 @@ def generate_report_excel(report_data: dict, days: int) -> bytes:
 
         for row, user in enumerate(report_data["users"], 2):
             ws.cell(row=row, column=1, value=row - 1)
-            ws.cell(row=row, column=2, value=user.get("name", ""))
+            ws.cell(row=row, column=2, value=user.get("user_name", ""))
             ws.cell(row=row, column=3, value=user.get("click_count", 0))
 
     # 保存到字节流

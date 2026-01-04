@@ -827,11 +827,25 @@ async function handleToolClick(tool) {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  background: var(--bg-tertiary);
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.sort-box :deep(.el-select) {
+  width: 100px;
+}
+
+.sort-box :deep(.el-select .el-input__wrapper) {
+  box-shadow: none;
+  background: var(--bg-secondary);
 }
 
 .sort-label {
-  font-size: 14px;
-  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* 标签筛选栏 */
@@ -1295,6 +1309,11 @@ async function handleToolClick(tool) {
     width: 100%;
     max-width: none;
     order: 10;
+  }
+
+  .sort-box {
+    order: 5;
+    margin-left: 0;
   }
 
   .content {

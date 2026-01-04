@@ -10,6 +10,8 @@ class ReportPushSettings(Base):
     id = Column(Integer, primary_key=True, index=True)
     enabled = Column(Boolean, default=False, comment="是否启用定时推送")
     push_time = Column(String(10), nullable=True, comment="推送时间 HH:mm")
+    report_types = Column(String(100), nullable=True, default="overview,tools", comment="报表类型,逗号分隔")
+    days = Column(Integer, default=7, comment="统计周期(天)")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

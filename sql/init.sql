@@ -212,9 +212,22 @@ CREATE TABLE IF NOT EXISTS report_push_settings (
     id SERIAL PRIMARY KEY,
     enabled BOOLEAN DEFAULT false,
     push_time VARCHAR(10),
+    report_types VARCHAR(100) DEFAULT 'overview,tools',
+    days INT DEFAULT 7,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- 已有数据库升级：添加新字段（如果不存在）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'report_push_settings' AND column_name = 'report_types') THEN
+        ALTER TABLE report_push_settings ADD COLUMN report_types VARCHAR(100) DEFAULT 'overview,tools';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'report_push_settings' AND column_name = 'days') THEN
+        ALTER TABLE report_push_settings ADD COLUMN days INT DEFAULT 7;
+    END IF;
+END $$;
 
 -- 报表推送接收人表
 CREATE TABLE IF NOT EXISTS report_recipients (

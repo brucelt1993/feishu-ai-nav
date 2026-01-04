@@ -70,6 +70,10 @@ MIGRATIONS = [
     # 工具表新增 provider 字段
     "ALTER TABLE tools ADD COLUMN provider VARCHAR(100)",
 
+    # 报表推送设置表新增字段
+    "ALTER TABLE report_push_settings ADD COLUMN report_types VARCHAR(100) DEFAULT 'overview,tools'",
+    "ALTER TABLE report_push_settings ADD COLUMN days INTEGER DEFAULT 7",
+
     # 初始化管理员账号 (admin / krmbe4bb)
     """
     INSERT OR IGNORE INTO admin_users (username, password_hash, nickname, is_active)
