@@ -41,7 +41,7 @@
           @click="setMode('category')"
         >
           <el-icon><Menu /></el-icon>
-          <span>目录</span>
+          <span>分类浏览</span>
         </button>
         <button
           class="mode-tab"
@@ -49,7 +49,7 @@
           @click="setMode('global')"
         >
           <el-icon><Grid /></el-icon>
-          <span>全局</span>
+          <span>全部工具</span>
         </button>
       </div>
 
@@ -184,28 +184,35 @@
             <!-- 有子分类 -->
             <el-sub-menu v-if="cat.children?.length" :index="String(cat.id)">
               <template #title>
-                <span class="cat-icon" :style="{ background: cat.color || '#667eea' }">
-                  {{ cat.name.charAt(0) }}
-                </span>
-                <span>{{ cat.name }}</span>
+                <div class="cat-item-wrapper">
+                  <span class="cat-icon" :style="{ background: cat.color || '#667eea' }">
+                    {{ cat.name.charAt(0) }}
+                  </span>
+                  <span class="cat-name">{{ cat.name }}</span>
+                </div>
               </template>
               <el-menu-item
                 v-for="child in cat.children"
                 :key="child.id"
                 :index="String(child.id)"
+                class="child-menu-item"
               >
-                {{ child.name }}
-                <span class="tool-count">{{ child.tools?.length || 0 }}</span>
+                <div class="child-item-wrapper">
+                  <span class="child-name">{{ child.name }}</span>
+                  <span class="tool-badge" v-if="child.tools?.length">{{ child.tools.length }}</span>
+                </div>
               </el-menu-item>
             </el-sub-menu>
 
             <!-- 无子分类 -->
             <el-menu-item v-else :index="String(cat.id)">
-              <span class="cat-icon" :style="{ background: cat.color || '#667eea' }">
-                {{ cat.name.charAt(0) }}
-              </span>
-              <span>{{ cat.name }}</span>
-              <span class="tool-count">{{ cat.tools?.length || 0 }}</span>
+              <div class="cat-item-wrapper">
+                <span class="cat-icon" :style="{ background: cat.color || '#667eea' }">
+                  {{ cat.name.charAt(0) }}
+                </span>
+                <span class="cat-name">{{ cat.name }}</span>
+                <span class="tool-badge" v-if="cat.tools?.length">{{ cat.tools.length }}</span>
+              </div>
             </el-menu-item>
           </template>
         </el-menu>
@@ -348,7 +355,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Collection, Plus, Menu, Grid, Search, User, Sunny, Moon, TrendCharts, QuestionFilled, Clock, Close, PriceTag } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { useConfigStore } from '@/stores/config'
 import { categoriesApi, toolsApi } from '@/api'
 import { initFeishuSDK, feishuLogin, openInFeishu, isInFeishu } from '@/utils/feishu'
 import { useNavMode } from '@/composables/useNavMode'
@@ -360,7 +366,11 @@ import WantToolDialog from '@/components/WantToolDialog.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
-const configStore = useConfigStore()
+
+// 是否允许匿名访问（从环境变量读取）
+const allowAnonymous = import.meta.env.VITE_ALLOW_ANONYMOUS === 'true'
+// 是否可以查看工具列表（已登录 或 允许匿名访问）
+const canViewTools = computed(() => allowAnonymous || userStore.isLoggedIn)
 const { currentMode, searchKeyword, sortBy, setMode, setSearchKeyword, clearSearch } = useNavMode()
 const { isDark, toggleTheme } = useTheme()
 const { searchHistory, fetchHistory, addHistory, deleteHistory, clearHistory } = useSearchHistory()
@@ -392,9 +402,6 @@ const { showShortcutsHint, shortcuts } = useKeyboardNav({
 // 搜索热词
 const hotwords = ref([])
 const showHotwords = ref(false)
-
-// 是否允许查看工具列表（允许匿名访问 或 已登录）
-const canViewTools = computed(() => configStore.allowAnonymous || userStore.isLoggedIn)
 
 const categories = ref([])
 const loading = ref(true)
@@ -1120,6 +1127,13 @@ async function handleToolClick(tool) {
   font-weight: 600;
 }
 
+.cat-item-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
 .cat-icon {
   display: inline-flex;
   align-items: center;
@@ -1132,16 +1146,51 @@ async function handleToolClick(tool) {
   font-weight: 700;
   margin-right: 10px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
 }
 
-.tool-count {
-  margin-left: auto;
+.cat-name {
+  flex: 1;
+}
+
+.child-item-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.child-name {
+  flex: 1;
+}
+
+/* 工具数量角标 */
+.tool-badge {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
   font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+.category-menu :deep(.el-menu-item.is-active) .tool-badge {
+  background: #fff;
+  color: #667eea;
+}
+
+.category-menu :deep(.child-menu-item) {
+  padding-right: 40px !important;
 }
 
 .content {

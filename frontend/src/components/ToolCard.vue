@@ -6,6 +6,11 @@
       <span>HOT</span>
     </div>
 
+    <!-- 详情角标按钮 -->
+    <button class="detail-badge" @click.stop="handleShowDetail" title="查看详情">
+      <el-icon><InfoFilled /></el-icon>
+    </button>
+
     <!-- 顶部区域：图标和信息 -->
     <div class="card-header">
       <div class="tool-icon" :style="iconStyle">
@@ -18,6 +23,11 @@
           <el-tag v-if="isNew" size="small" type="success" class="new-tag">NEW</el-tag>
         </div>
         <div class="tool-desc" v-if="tool.description">{{ tool.description }}</div>
+        <!-- 提供者信息 -->
+        <div class="tool-provider" v-if="tool.provider">
+          <el-icon><OfficeBuilding /></el-icon>
+          <span>{{ tool.provider }}</span>
+        </div>
         <!-- 热度指示器 -->
         <div class="heat-indicator" v-if="stats.like_count > 0">
           <div class="heat-bar">
@@ -78,18 +88,24 @@
         v-model="showWantDialog"
         @success="handleWantSuccess"
       />
+      <ToolDetailDialog
+        v-model="showDetailDialog"
+        :tool="tool"
+        :category-color="categoryColor"
+        @open="handleClick"
+      />
     </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { ArrowRight, Star, StarFilled, Collection, CollectionTag, ChatLineSquare, Promotion, TrendCharts } from '@element-plus/icons-vue'
+import { ArrowRight, Star, StarFilled, Collection, CollectionTag, ChatLineSquare, Promotion, TrendCharts, InfoFilled, OfficeBuilding } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { useConfigStore } from '@/stores/config'
 import { toolsApi } from '@/api'
 import FeedbackDialog from './FeedbackDialog.vue'
 import WantToolDialog from './WantToolDialog.vue'
+import ToolDetailDialog from './ToolDetailDialog.vue'
 
 const props = defineProps({
   tool: {
@@ -142,12 +158,12 @@ function adjustColor(color, amount) {
 }
 
 const userStore = useUserStore()
-const configStore = useConfigStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
-// 可以交互：已登录 或 开启匿名交互模式
-const canInteract = computed(() => isLoggedIn.value || configStore.allowAnonymousInteraction)
+// 只有登录后才能交互
+const canInteract = computed(() => isLoggedIn.value)
 const showFeedbackDialog = ref(false)
 const showWantDialog = ref(false)
+const showDetailDialog = ref(false)
 
 const stats = ref({
   like_count: 0,
@@ -214,6 +230,10 @@ async function handleFavorite() {
 function handleFeedback() {
   if (!canInteract.value) return
   showFeedbackDialog.value = true
+}
+
+function handleShowDetail() {
+  showDetailDialog.value = true
 }
 
 function handleFeedbackSuccess() {
@@ -284,11 +304,47 @@ function handleWantSuccess() {
   font-weight: 600;
   border-radius: 12px;
   animation: pulse 2s infinite;
+  z-index: 2;
 }
 
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
+}
+
+/* 详情角标按钮 */
+.detail-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(102, 126, 234, 0.1);
+  color: var(--accent-color, #667eea);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.detail-badge:hover {
+  background: var(--accent-color, #667eea);
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+}
+
+.detail-badge .el-icon {
+  font-size: 16px;
+}
+
+/* 热门时详情角标位置调整 */
+.tool-card.is-hot .detail-badge {
+  top: 48px;
 }
 
 /* 卡片头部 */
@@ -358,7 +414,22 @@ function handleWantSuccess() {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+/* 提供者信息 */
+.tool-provider {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tool-provider .el-icon {
+  font-size: 14px;
+  color: var(--accent-color);
 }
 
 /* 热度指示器 */
@@ -529,6 +600,17 @@ function handleWantSuccess() {
   background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(220, 38, 38, 0.2) 100%);
   border-color: rgba(248, 113, 113, 0.5);
   color: #fca5a5;
+}
+
+/* 深色模式详情角标 */
+:root.dark .detail-badge {
+  background: rgba(102, 126, 234, 0.2);
+  color: #a5b4fc;
+}
+
+:root.dark .detail-badge:hover {
+  background: rgba(102, 126, 234, 0.8);
+  color: #fff;
 }
 
 /* 打开提示 */

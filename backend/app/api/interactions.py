@@ -13,41 +13,16 @@ from ..schemas import (
     SearchHistoryItem, SearchHistoryResponse
 )
 from .auth import verify_token
-from ..config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-settings = get_settings()
-
-
-async def get_or_create_anonymous_user(db: AsyncSession) -> User:
-    """获取或创建匿名用户"""
-    anon_open_id = "anonymous_dev_user"
-    result = await db.execute(select(User).where(User.open_id == anon_open_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        user = User(
-            open_id=anon_open_id,
-            name="匿名用户",
-            avatar_url=""
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        logger.info("创建匿名开发用户")
-    return user
 
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """获取当前登录用户（必须登录，或启用匿名模式）"""
-    # 匿名模式：允许未登录用户进行交互
-    if settings.allow_anonymous_interaction:
-        if not authorization or not authorization.startswith("Bearer "):
-            return await get_or_create_anonymous_user(db)
-
+    """获取当前登录用户（必须登录）"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="请先登录")
 
@@ -55,17 +30,11 @@ async def get_current_user(
     try:
         open_id = verify_token(token)
     except Exception:
-        # 匿名模式下token无效也返回匿名用户
-        if settings.allow_anonymous_interaction:
-            return await get_or_create_anonymous_user(db)
         raise HTTPException(status_code=401, detail="登录已过期")
 
     result = await db.execute(select(User).where(User.open_id == open_id))
     user = result.scalar_one_or_none()
     if not user:
-        # 匿名模式下用户不存在也返回匿名用户
-        if settings.allow_anonymous_interaction:
-            return await get_or_create_anonymous_user(db)
         raise HTTPException(status_code=401, detail="用户不存在")
 
     return user
@@ -75,28 +44,16 @@ async def get_optional_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
-    """获取当前用户（可选，未登录返回 None，匿名模式返回匿名用户）"""
+    """获取当前用户（可选，未登录返回 None）"""
     if not authorization or not authorization.startswith("Bearer "):
-        # 匿名模式下返回匿名用户
-        if settings.allow_anonymous_interaction:
-            return await get_or_create_anonymous_user(db)
         return None
 
     token = authorization[7:]
     try:
         open_id = verify_token(token)
         result = await db.execute(select(User).where(User.open_id == open_id))
-        user = result.scalar_one_or_none()
-        if user:
-            return user
-        # 匿名模式下用户不存在返回匿名用户
-        if settings.allow_anonymous_interaction:
-            return await get_or_create_anonymous_user(db)
-        return None
+        return result.scalar_one_or_none()
     except Exception:
-        # 匿名模式下返回匿名用户
-        if settings.allow_anonymous_interaction:
-            return await get_or_create_anonymous_user(db)
         return None
 
 

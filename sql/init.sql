@@ -206,3 +206,39 @@ INSERT INTO tags (name, color) VALUES
 ('热门', '#409eff'),
 ('新上线', '#909399')
 ON CONFLICT (name) DO NOTHING;
+
+-- 报表推送设置表
+CREATE TABLE IF NOT EXISTS report_push_settings (
+    id SERIAL PRIMARY KEY,
+    enabled BOOLEAN DEFAULT false,
+    push_time VARCHAR(10),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 报表推送接收人表
+CREATE TABLE IF NOT EXISTS report_recipients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipients_email ON report_recipients(email);
+CREATE INDEX IF NOT EXISTS idx_recipients_active ON report_recipients(is_active);
+
+-- 报表推送历史表
+CREATE TABLE IF NOT EXISTS report_push_history (
+    id SERIAL PRIMARY KEY,
+    report_type VARCHAR(50) NOT NULL,
+    push_method VARCHAR(20) NOT NULL,
+    recipient_count INT DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending',
+    error_msg TEXT,
+    pushed_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_history_status ON report_push_history(status);
+CREATE INDEX IF NOT EXISTS idx_push_history_time ON report_push_history(pushed_at);

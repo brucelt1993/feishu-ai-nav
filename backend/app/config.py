@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = False
     app_base_url: str = ""  # 应用访问地址，用于卡片消息链接
-    allow_anonymous_interaction: bool = False  # 允许匿名交互（收藏/点赞/反馈）
 
     @property
     def admin_list(self) -> list[str]:

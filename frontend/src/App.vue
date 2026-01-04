@@ -4,31 +4,14 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { useUserStore } from '@/stores/user'
-import { useConfigStore } from '@/stores/config'
 import { initFeishuSDK } from '@/utils/feishu'
 import { useTheme } from '@/composables/useTheme'
 
-const userStore = useUserStore()
-const configStore = useConfigStore()
 useTheme()
 
 onMounted(async () => {
-  // 加载应用配置
-  await configStore.loadConfig()
-
   // 初始化飞书JSSDK
   await initFeishuSDK()
-
-  // 尝试自动登录
-  const token = localStorage.getItem('token')
-  if (token) {
-    userStore.setToken(token)
-    const userInfo = localStorage.getItem('userInfo')
-    if (userInfo) {
-      userStore.setUser(JSON.parse(userInfo))
-    }
-  }
 })
 </script>
 

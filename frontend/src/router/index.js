@@ -61,6 +61,12 @@ const routes = [
         name: 'AdminTags',
         component: () => import('@/views/admin/Tags.vue'),
         meta: { title: '标签管理' }
+      },
+      {
+        path: 'report-push',
+        name: 'ReportPush',
+        component: () => import('@/views/admin/ReportPush.vue'),
+        meta: { title: '报表推送' }
       }
     ]
   }

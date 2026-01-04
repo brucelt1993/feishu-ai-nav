@@ -30,6 +30,25 @@ export const useUserStore = defineStore('user', () => {
     return token.value ? { Authorization: `Bearer ${token.value}` } : {}
   }
 
+  // 初始化时从 localStorage 恢复状态
+  function init() {
+    const storedToken = localStorage.getItem('token')
+    if (storedToken) {
+      token.value = storedToken
+      const storedUser = localStorage.getItem('userInfo')
+      if (storedUser) {
+        try {
+          user.value = JSON.parse(storedUser)
+        } catch (e) {
+          console.warn('解析用户信息失败:', e)
+        }
+      }
+    }
+  }
+
+  // 立即初始化
+  init()
+
   return {
     token,
     user,

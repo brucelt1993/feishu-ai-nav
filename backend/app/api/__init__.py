@@ -8,6 +8,7 @@ from .categories import router as categories_router
 from .interactions import router as interactions_router
 from .feedback import router as feedback_router
 from .tags import router as tags_router
+from .report_push import router as report_push_router
 
 api_router = APIRouter()
 
@@ -20,3 +21,4 @@ api_router.include_router(feishu_router, prefix="/feishu", tags=["飞书"])
 api_router.include_router(interactions_router, tags=["用户交互"])
 api_router.include_router(feedback_router, tags=["反馈"])
 api_router.include_router(tags_router, prefix="/admin", tags=["标签管理"])
+api_router.include_router(report_push_router, tags=["报表推送"])

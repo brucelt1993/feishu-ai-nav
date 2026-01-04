@@ -88,11 +88,6 @@ api.interceptors.response.use(
   }
 )
 
-// ============ 配置API ============
-export const configApi = {
-  get: () => api.get('/config'),
-}
-
 // ============ 认证API ============
 export const authApi = {
   login: (code) => api.post('/auth/login', { code }),
@@ -207,6 +202,17 @@ export const adminApi = {
     })
   },
   downloadTemplate: () => api.get('/admin/tools/import/template', { responseType: 'blob' }),
+
+  // 报表推送
+  getReportPushSettings: () => api.get('/admin/report-push/settings'),
+  saveReportPushSettings: (data) => api.put('/admin/report-push/settings', data),
+  getReportRecipients: () => api.get('/admin/report-push/recipients'),
+  addReportRecipient: (data) => api.post('/admin/report-push/recipients', data),
+  updateReportRecipient: (id, data) => api.put(`/admin/report-push/recipients/${id}`, data),
+  deleteReportRecipient: (id) => api.delete(`/admin/report-push/recipients/${id}`),
+  getReportPushHistory: (page = 1, size = 10) => api.get('/admin/report-push/history', { params: { page, size } }),
+  pushReport: (data) => api.post('/admin/report-push/push', data),
+  previewReport: (data) => api.post('/admin/report-push/preview', data),
 }
 
 export default api

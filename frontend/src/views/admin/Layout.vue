@@ -36,14 +36,11 @@
           <el-icon><PriceTag /></el-icon>
           <span>标签管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/report-push">
+          <el-icon><Promotion /></el-icon>
+          <span>报表推送</span>
+        </el-menu-item>
       </el-menu>
-
-      <div class="sidebar-footer">
-        <el-button text @click="goHome">
-          <el-icon><Back /></el-icon>
-          返回首页
-        </el-button>
-      </div>
     </aside>
 
     <!-- 主内容区 -->
@@ -79,7 +76,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAdminStore } from '@/stores/admin'
 import { adminAuthApi } from '@/api'
-import { DataBoard, Grid, Tools, TrendCharts, Back, ChatLineSquare, Setting, PriceTag } from '@element-plus/icons-vue'
+import { DataBoard, Grid, Tools, TrendCharts, ChatLineSquare, Setting, PriceTag, Promotion } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -90,10 +87,6 @@ const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => {
   return route.meta.title || '管理后台'
 })
-
-function goHome() {
-  router.push('/')
-}
 
 function handleCommand(command) {
   if (command === 'logout') {
@@ -212,26 +205,6 @@ async function handleChangePassword() {
 .sidebar-menu :deep(.el-menu-item .el-icon) {
   font-size: 18px;
   margin-right: 12px;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-footer .el-button {
-  width: 100%;
-  justify-content: flex-start;
-  color: rgba(255, 255, 255, 0.6);
-  padding: 12px 16px;
-  height: auto;
-  border-radius: 10px;
-  transition: all 0.3s;
-}
-
-.sidebar-footer .el-button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
 }
 
 /* 主内容区 */
