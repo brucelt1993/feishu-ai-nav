@@ -158,6 +158,85 @@ class StatsService:
             for row in rows
         ]
 
+    async def get_category_distribution(self) -> list[dict]:
+        """获取分类使用分布"""
+        from ..models import Category
+
+        query = (
+            select(
+                Category.id,
+                Category.name,
+                Category.color,
+                func.count(ClickLog.id).label("click_count"),
+                func.count(distinct(ClickLog.user_id)).label("unique_users"),
+            )
+            .join(Tool, Category.id == Tool.category_id)
+            .join(ClickLog, Tool.id == ClickLog.tool_id)
+            .where(Category.parent_id.is_(None))  # 只统计一级分类
+            .group_by(Category.id, Category.name, Category.color)
+            .order_by(func.count(ClickLog.id).desc())
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        return [
+            {
+                "category_id": row.id,
+                "category_name": row.name,
+                "color": row.color or "#667eea",
+                "click_count": row.click_count,
+                "unique_users": row.unique_users,
+            }
+            for row in rows
+        ]
+
+    async def get_tool_detail_stats(self, tool_id: int, days: int = 30) -> dict:
+        """获取单个工具的详细统计"""
+        start_date = datetime.now() - timedelta(days=days)
+
+        # 基础统计
+        base_query = select(
+            func.count(ClickLog.id).label("pv"),
+            func.count(distinct(ClickLog.user_id)).label("uv"),
+        ).where(
+            ClickLog.tool_id == tool_id,
+            ClickLog.clicked_at >= start_date
+        )
+        base_result = await self.db.execute(base_query)
+        base_row = base_result.one()
+
+        # 日趋势
+        trend_query = (
+            select(
+                func.date(ClickLog.clicked_at).label("date"),
+                func.count(ClickLog.id).label("pv"),
+                func.count(distinct(ClickLog.user_id)).label("uv"),
+            )
+            .where(
+                ClickLog.tool_id == tool_id,
+                ClickLog.clicked_at >= start_date
+            )
+            .group_by(func.date(ClickLog.clicked_at))
+            .order_by(func.date(ClickLog.clicked_at))
+        )
+        trend_result = await self.db.execute(trend_query)
+        trend_rows = trend_result.all()
+
+        return {
+            "tool_id": tool_id,
+            "total_pv": base_row.pv or 0,
+            "total_uv": base_row.uv or 0,
+            "trend": [
+                {
+                    "date": row.date if isinstance(row.date, str) else row.date.isoformat(),
+                    "pv": row.pv,
+                    "uv": row.uv,
+                }
+                for row in trend_rows
+            ]
+        }
+
     async def generate_daily_report(self) -> dict:
         """生成日报数据"""
         overview = await self.get_overview()

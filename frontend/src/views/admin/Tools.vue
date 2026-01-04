@@ -58,6 +58,22 @@
           <span v-else class="no-category">未分类</span>
         </template>
       </el-table-column>
+      <el-table-column label="标签" min-width="150">
+        <template #default="{ row }">
+          <div class="tag-cell" v-if="row.tags?.length">
+            <el-tag
+              v-for="tag in row.tags"
+              :key="tag.id"
+              size="small"
+              :style="{ background: tag.color, borderColor: tag.color }"
+              effect="dark"
+            >
+              {{ tag.name }}
+            </el-tag>
+          </div>
+          <span v-else class="no-category">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="sort_order" label="排序" width="80" />
       <el-table-column label="状态" width="80">
         <template #default="{ row }">
@@ -131,6 +147,26 @@
             clearable
             style="width: 100%"
           />
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-select
+            v-model="selectedTagIds"
+            multiple
+            placeholder="选择标签"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="tag in allTags"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
+            >
+              <span class="tag-option">
+                <span class="tag-dot" :style="{ background: tag.color }"></span>
+                {{ tag.name }}
+              </span>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="排序" prop="sort_order">
           <el-input-number v-model="formData.sort_order" :min="0" />
@@ -218,10 +254,12 @@ const loading = ref(false)
 const submitting = ref(false)
 const tools = ref([])
 const categories = ref([])
+const allTags = ref([])
 const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const filterCategoryId = ref(null)
+const selectedTagIds = ref([])
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -280,9 +318,18 @@ watch(categoryPath, (val) => {
 })
 
 onMounted(async () => {
-  await loadCategories()
+  await Promise.all([loadCategories(), loadTags()])
   await loadTools()
 })
+
+async function loadTags() {
+  try {
+    const res = await adminApi.getTags()
+    allTags.value = res.items || []
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
 
 async function loadCategories() {
   try {
@@ -313,7 +360,7 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
-function handleEdit(row) {
+async function handleEdit(row) {
   isEdit.value = true
   editId.value = row.id
   Object.assign(formData, {
@@ -327,6 +374,14 @@ function handleEdit(row) {
     is_active: row.is_active
   })
   categoryPath.value = row.category_id
+  // 加载工具的标签
+  try {
+    const tags = await adminApi.getToolTags(row.id)
+    selectedTagIds.value = tags.map(t => t.id)
+  } catch (error) {
+    console.error('加载工具标签失败:', error)
+    selectedTagIds.value = []
+  }
   dialogVisible.value = true
 }
 
@@ -335,12 +390,20 @@ async function handleSubmit() {
     await formRef.value.validate()
     submitting.value = true
 
+    let toolId
     if (isEdit.value) {
       await adminApi.updateTool(editId.value, formData)
+      toolId = editId.value
       ElMessage.success('更新成功')
     } else {
-      await adminApi.createTool(formData)
+      const result = await adminApi.createTool(formData)
+      toolId = result.id
       ElMessage.success('创建成功')
+    }
+
+    // 保存标签
+    if (toolId) {
+      await adminApi.setToolTags(toolId, selectedTagIds.value)
     }
 
     dialogVisible.value = false
@@ -409,6 +472,7 @@ function resetForm() {
     is_active: true
   })
   categoryPath.value = null
+  selectedTagIds.value = []
 }
 
 // ============ 导入相关 ============
@@ -497,5 +561,24 @@ async function downloadTemplate() {
   color: #e6a23c;
   max-height: 150px;
   overflow-y: auto;
+}
+
+.tag-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 </style>

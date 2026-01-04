@@ -6,22 +6,48 @@ from typing import Optional
 import logging
 
 from ..database import get_db
-from ..models import Tool, User, UserFavorite, UserLike, Category
+from ..models import Tool, User, UserFavorite, UserLike, Category, SearchHistory
 from ..schemas import (
     InteractionResponse, ToolInteractionStats,
-    FavoriteToolResponse, FavoriteListResponse
+    FavoriteToolResponse, FavoriteListResponse,
+    SearchHistoryItem, SearchHistoryResponse
 )
 from .auth import verify_token
+from ..config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+async def get_or_create_anonymous_user(db: AsyncSession) -> User:
+    """获取或创建匿名用户"""
+    anon_open_id = "anonymous_dev_user"
+    result = await db.execute(select(User).where(User.open_id == anon_open_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(
+            open_id=anon_open_id,
+            name="匿名用户",
+            avatar_url=""
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        logger.info("创建匿名开发用户")
+    return user
 
 
 async def get_current_user(
-    authorization: str = Header(...),
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """获取当前登录用户（必须登录）"""
+    """获取当前登录用户（必须登录，或启用匿名模式）"""
+    # 匿名模式：允许未登录用户进行交互
+    if settings.allow_anonymous_interaction:
+        if not authorization or not authorization.startswith("Bearer "):
+            return await get_or_create_anonymous_user(db)
+
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="请先登录")
 
@@ -29,11 +55,17 @@ async def get_current_user(
     try:
         open_id = verify_token(token)
     except Exception:
+        # 匿名模式下token无效也返回匿名用户
+        if settings.allow_anonymous_interaction:
+            return await get_or_create_anonymous_user(db)
         raise HTTPException(status_code=401, detail="登录已过期")
 
     result = await db.execute(select(User).where(User.open_id == open_id))
     user = result.scalar_one_or_none()
     if not user:
+        # 匿名模式下用户不存在也返回匿名用户
+        if settings.allow_anonymous_interaction:
+            return await get_or_create_anonymous_user(db)
         raise HTTPException(status_code=401, detail="用户不存在")
 
     return user
@@ -43,16 +75,28 @@ async def get_optional_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
-    """获取当前用户（可选，未登录返回 None）"""
+    """获取当前用户（可选，未登录返回 None，匿名模式返回匿名用户）"""
     if not authorization or not authorization.startswith("Bearer "):
+        # 匿名模式下返回匿名用户
+        if settings.allow_anonymous_interaction:
+            return await get_or_create_anonymous_user(db)
         return None
 
     token = authorization[7:]
     try:
         open_id = verify_token(token)
         result = await db.execute(select(User).where(User.open_id == open_id))
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+        # 匿名模式下用户不存在返回匿名用户
+        if settings.allow_anonymous_interaction:
+            return await get_or_create_anonymous_user(db)
+        return None
     except Exception:
+        # 匿名模式下返回匿名用户
+        if settings.allow_anonymous_interaction:
+            return await get_or_create_anonymous_user(db)
         return None
 
 
@@ -247,3 +291,103 @@ async def get_tool_stats(
         is_liked=is_liked,
         is_favorited=is_favorited,
     )
+
+
+# ========== 搜索历史 ==========
+
+@router.get("/user/search-history", response_model=SearchHistoryResponse)
+async def get_search_history(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """获取用户搜索历史（最近N条，去重）"""
+    # 使用子查询获取每个关键词的最新记录
+    subquery = (
+        select(
+            SearchHistory.keyword,
+            func.max(SearchHistory.searched_at).label("latest")
+        )
+        .where(SearchHistory.user_id == user.id)
+        .group_by(SearchHistory.keyword)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(SearchHistory)
+        .join(
+            subquery,
+            (SearchHistory.keyword == subquery.c.keyword) &
+            (SearchHistory.searched_at == subquery.c.latest)
+        )
+        .where(SearchHistory.user_id == user.id)
+        .order_by(SearchHistory.searched_at.desc())
+        .limit(limit)
+    )
+    histories = result.scalars().all()
+
+    items = [
+        SearchHistoryItem(
+            id=h.id,
+            keyword=h.keyword,
+            searched_at=h.searched_at
+        )
+        for h in histories
+    ]
+
+    return SearchHistoryResponse(total=len(items), items=items)
+
+
+@router.post("/user/search-history", response_model=InteractionResponse)
+async def add_search_history(
+    keyword: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """记录搜索历史"""
+    if not keyword or len(keyword.strip()) == 0:
+        return InteractionResponse(success=False, message="关键词不能为空")
+
+    keyword = keyword.strip()[:100]  # 限制长度
+
+    history = SearchHistory(user_id=user.id, keyword=keyword)
+    db.add(history)
+    await db.commit()
+
+    logger.info(f"用户 {user.name} 搜索了: {keyword}")
+    return InteractionResponse(success=True, message="已记录")
+
+
+@router.delete("/user/search-history/{history_id}", response_model=InteractionResponse)
+async def delete_search_history(
+    history_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """删除单条搜索历史"""
+    result = await db.execute(
+        delete(SearchHistory).where(
+            SearchHistory.id == history_id,
+            SearchHistory.user_id == user.id
+        )
+    )
+    await db.commit()
+
+    if result.rowcount > 0:
+        return InteractionResponse(success=True, message="已删除")
+    return InteractionResponse(success=False, message="记录不存在")
+
+
+@router.delete("/user/search-history", response_model=InteractionResponse)
+async def clear_search_history(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """清空搜索历史"""
+    result = await db.execute(
+        delete(SearchHistory).where(SearchHistory.user_id == user.id)
+    )
+    await db.commit()
+
+    logger.info(f"用户 {user.name} 清空了搜索历史，删除 {result.rowcount} 条")
+    return InteractionResponse(success=True, message=f"已清空 {result.rowcount} 条记录")

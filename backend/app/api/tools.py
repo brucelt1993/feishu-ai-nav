@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 import logging
 
 from ..database import get_db
-from ..models import Tool, User, ClickLog, UserLike, Category
-from ..schemas import ToolResponse
+from ..models import Tool, User, ClickLog, UserLike, Category, Tag
+from ..schemas import ToolResponse, TagSimple
 from ..services.click_service import should_record_click
 from .auth import verify_token
 
@@ -23,14 +23,19 @@ async def get_tools(
     sort: Literal["default", "hot", "recent", "name"] = Query("default", description="排序方式"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     category_id: Optional[int] = Query(None, description="分类ID筛选"),
+    tag_id: Optional[int] = Query(None, description="标签ID筛选"),
     db: AsyncSession = Depends(get_db),
 ):
     """获取工具列表（支持搜索和排序）"""
-    query = select(Tool).options(selectinload(Tool.category)).where(Tool.is_active == True)
+    query = select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags)).where(Tool.is_active == True)
 
     # 分类筛选
     if category_id:
         query = query.where(Tool.category_id == category_id)
+
+    # 标签筛选
+    if tag_id:
+        query = query.where(Tool.tags.any(Tag.id == tag_id))
 
     # 关键词搜索
     if keyword:
@@ -148,3 +153,11 @@ async def record_click(
     logger.info(f"记录点击: tool_id={tool_id}, user_id={user_id}")
 
     return {"success": True, "target_url": tool.target_url}
+
+
+@router.get("/tags", response_model=list[TagSimple])
+async def get_tags(db: AsyncSession = Depends(get_db)):
+    """获取所有标签（公开接口）"""
+    result = await db.execute(select(Tag).order_by(Tag.name))
+    tags = result.scalars().all()
+    return [TagSimple.model_validate(t) for t in tags]

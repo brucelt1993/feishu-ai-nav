@@ -1,6 +1,7 @@
 """用户模型"""
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from ..database import Base
 
 
@@ -19,3 +20,6 @@ class User(Base):
     first_visit_at = Column(DateTime, server_default=func.now())
     last_visit_at = Column(DateTime, server_default=func.now())
     visit_count = Column(Integer, default=1)
+
+    # 关系
+    search_histories = relationship("SearchHistory", back_populates="user", cascade="all, delete-orphan")

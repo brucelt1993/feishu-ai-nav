@@ -168,3 +168,41 @@ INSERT INTO tools (name, description, target_url, category_id, sort_order) VALUE
 ('Midjourney', 'AI图像生成', 'https://midjourney.com', 6, 1),
 ('Notion AI', '智能笔记助手', 'https://notion.so', 7, 1)
 ON CONFLICT DO NOTHING;
+
+-- 搜索历史表
+CREATE TABLE IF NOT EXISTS search_history (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    keyword VARCHAR(100) NOT NULL,
+    searched_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_history_user ON search_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_search_history_time ON search_history(searched_at);
+
+-- 标签表
+CREATE TABLE IF NOT EXISTS tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    color VARCHAR(20) DEFAULT '#667eea',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 工具标签关联表
+CREATE TABLE IF NOT EXISTS tool_tags (
+    tool_id INT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+    tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (tool_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_tags_tool ON tool_tags(tool_id);
+CREATE INDEX IF NOT EXISTS idx_tool_tags_tag ON tool_tags(tag_id);
+
+-- 插入示例标签
+INSERT INTO tags (name, color) VALUES
+('免费', '#67c23a'),
+('付费', '#e6a23c'),
+('国产', '#f56c6c'),
+('热门', '#409eff'),
+('新上线', '#909399')
+ON CONFLICT (name) DO NOTHING;

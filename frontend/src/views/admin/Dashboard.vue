@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View, User, Histogram, UserFilled } from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
@@ -83,6 +83,7 @@ const toolChart = ref(null)
 
 let trendChartInstance = null
 let toolChartInstance = null
+let resizeHandler = null
 
 onMounted(async () => {
   await Promise.all([
@@ -91,11 +92,40 @@ onMounted(async () => {
     loadToolStats(),
     loadUserStats()
   ])
+
+  // 监听窗口resize，响应式调整图表
+  resizeHandler = () => {
+    trendChartInstance?.resize()
+    toolChartInstance?.resize()
+  }
+  window.addEventListener('resize', resizeHandler)
 })
 
 onUnmounted(() => {
-  trendChartInstance?.dispose()
-  toolChartInstance?.dispose()
+  // 清理resize事件监听
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = null
+  }
+  // 销毁图表实例
+  if (trendChartInstance) {
+    trendChartInstance.dispose()
+    trendChartInstance = null
+  }
+  if (toolChartInstance) {
+    toolChartInstance.dispose()
+    toolChartInstance = null
+  }
+})
+
+// keep-alive 支持
+onActivated(() => {
+  trendChartInstance?.resize()
+  toolChartInstance?.resize()
+})
+
+onDeactivated(() => {
+  // 组件被缓存时暂停可能的动画
 })
 
 async function loadOverview() {

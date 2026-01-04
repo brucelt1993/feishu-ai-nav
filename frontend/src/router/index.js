@@ -55,6 +55,12 @@ const routes = [
         name: 'AdminFeedback',
         component: () => import('@/views/admin/Feedback.vue'),
         meta: { title: '反馈管理' }
+      },
+      {
+        path: 'tags',
+        name: 'AdminTags',
+        component: () => import('@/views/admin/Tags.vue'),
+        meta: { title: '标签管理' }
       }
     ]
   }

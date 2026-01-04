@@ -61,6 +61,15 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/api/config")
+async def get_public_config():
+    """获取公开配置（前端使用）"""
+    return {
+        "allow_anonymous": settings.debug,  # 允许匿名访问工具列表
+        "allow_anonymous_interaction": settings.allow_anonymous_interaction,  # 允许匿名交互
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     import sys

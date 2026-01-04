@@ -6,6 +6,8 @@ from .statistics import StatisticsCache
 from .user_interaction import UserFavorite, UserLike
 from .feedback import ToolFeedback
 from .admin_user import AdminUser
+from .search_history import SearchHistory
+from .tag import Tag, tool_tags
 
 __all__ = [
     "Category",
@@ -17,4 +19,7 @@ __all__ = [
     "UserLike",
     "ToolFeedback",
     "AdminUser",
+    "SearchHistory",
+    "Tag",
+    "tool_tags",
 ]
