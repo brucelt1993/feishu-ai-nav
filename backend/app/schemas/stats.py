@@ -14,6 +14,22 @@ class StatsOverview(BaseModel):
     new_users_today: int
 
 
+class ExtendedStatsOverview(BaseModel):
+    """扩展的统计概览（含互动数据和环比）"""
+    today_pv: int
+    today_pv_trend: float  # 环比增长率
+    today_uv: int
+    today_uv_trend: float
+    total_pv: int
+    total_uv: int
+    new_users_today: int
+    new_users_trend: float
+    active_users_7d: int
+    total_favorites: int
+    total_likes: int
+    total_tools: int
+
+
 class ToolStats(BaseModel):
     """工具统计"""
     tool_id: int

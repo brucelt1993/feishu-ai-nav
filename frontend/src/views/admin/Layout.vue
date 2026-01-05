@@ -26,7 +26,7 @@
         </el-menu-item>
         <el-menu-item index="/admin/stats">
           <el-icon><TrendCharts /></el-icon>
-          <span>统计分析</span>
+          <span>数据报表</span>
         </el-menu-item>
         <el-menu-item index="/admin/feedback">
           <el-icon><ChatLineSquare /></el-icon>

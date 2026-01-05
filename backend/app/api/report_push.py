@@ -37,14 +37,17 @@ class RecipientUpdate(BaseModel):
 
 
 class PushRequest(BaseModel):
-    report_types: List[str]
+    report_types: List[str]  # clicks, interactions, providers, users, wants, custom
     days: int = 7
     method: str = "feishu"  # feishu or email
+    chat_ids: Optional[List[str]] = None  # 群聊ID列表
+    custom_content: Optional[str] = None  # 自定义报表内容
 
 
 class PreviewRequest(BaseModel):
-    report_types: List[str]
+    report_types: List[str]  # clicks, interactions, providers, users, wants, custom
     days: int = 7
+    custom_content: Optional[str] = None  # 自定义报表内容
 
 
 # ============ 设置管理 ============
@@ -202,6 +205,20 @@ async def delete_recipient(
     return {"message": "删除成功"}
 
 
+# ============ 群聊管理 ============
+@router.get("/chats")
+async def get_bot_chats(
+    _admin: str = Depends(verify_admin)
+):
+    """获取机器人已加入的群聊列表"""
+    try:
+        chats = await feishu_service.get_bot_joined_chats()
+        return chats
+    except Exception as e:
+        logger.error(f"获取群聊列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取群聊列表失败: {str(e)}")
+
+
 # ============ 推送历史 ============
 @router.get("/history")
 async def get_history(
@@ -254,17 +271,29 @@ async def preview_report(
     stats_service = StatsService(db)
     result = {}
 
-    if "overview" in data.report_types:
-        result["overview"] = await stats_service.get_overview()
+    # 工具点击
+    if "clicks" in data.report_types:
+        result["clicks"] = await stats_service.get_tool_stats(days=data.days, limit=10)
 
-    if "tools" in data.report_types:
-        result["tools"] = await stats_service.get_tool_stats(days=data.days, limit=10)
+    # 工具互动
+    if "interactions" in data.report_types:
+        result["interactions"] = await stats_service.get_tool_interactions(limit=10)
 
+    # 提供者排行
+    if "providers" in data.report_types:
+        result["providers"] = await stats_service.get_provider_stats(limit=10)
+
+    # 用户分析
     if "users" in data.report_types:
         result["users"] = await stats_service.get_user_stats(days=data.days, limit=10)
 
-    if "trend" in data.report_types:
-        result["trend"] = await stats_service.get_trend(days=data.days)
+    # 用户想要
+    if "wants" in data.report_types:
+        result["wants"] = await stats_service.get_want_list(limit=10)
+
+    # 自定义报表
+    if "custom" in data.report_types and data.custom_content:
+        result["custom"] = {"content": data.custom_content}
 
     return result
 
@@ -283,27 +312,44 @@ async def push_report(
     )
     recipient_objs = result.scalars().all()
 
-    if not recipient_objs:
-        raise HTTPException(status_code=400, detail="没有可用的推送接收人")
+    # 转换为字典
+    recipients = [{"name": r.name, "email": r.email, "type": "user"} for r in recipient_objs]
 
-    # 转换为字典，避免后台任务中 session 关闭后无法访问 ORM 属性
-    recipients = [{"name": r.name, "email": r.email} for r in recipient_objs]
+    # 添加群聊接收人
+    chat_ids = data.chat_ids or []
+    for chat_id in chat_ids:
+        recipients.append({"chat_id": chat_id, "type": "chat"})
+
+    if not recipients:
+        raise HTTPException(status_code=400, detail="没有可用的推送接收人或群聊")
 
     # 获取报表数据
     stats_service = StatsService(db)
     report_data = {}
 
-    if "overview" in data.report_types:
-        report_data["overview"] = await stats_service.get_overview()
+    # 工具点击
+    if "clicks" in data.report_types:
+        report_data["clicks"] = await stats_service.get_tool_stats(days=data.days, limit=10)
 
-    if "tools" in data.report_types:
-        report_data["tools"] = await stats_service.get_tool_stats(days=data.days, limit=10)
+    # 工具互动
+    if "interactions" in data.report_types:
+        report_data["interactions"] = await stats_service.get_tool_interactions(limit=10)
 
+    # 提供者排行
+    if "providers" in data.report_types:
+        report_data["providers"] = await stats_service.get_provider_stats(limit=10)
+
+    # 用户分析
     if "users" in data.report_types:
         report_data["users"] = await stats_service.get_user_stats(days=data.days, limit=10)
 
-    if "trend" in data.report_types:
-        report_data["trend"] = await stats_service.get_trend(days=data.days)
+    # 用户想要
+    if "wants" in data.report_types:
+        report_data["wants"] = await stats_service.get_want_list(limit=10)
+
+    # 自定义报表
+    if "custom" in data.report_types and data.custom_content:
+        report_data["custom"] = {"content": data.custom_content}
 
     # 记录推送历史
     history = ReportPushHistory(
@@ -352,20 +398,30 @@ async def push_feishu_report(history_id: int, recipients: list, report_data: dic
 
             for recipient in recipients:
                 try:
-                    # 通过邮箱获取用户open_id
-                    user_info = await feishu_service.get_user_by_email(recipient["email"])
-                    if user_info and user_info.get("open_id"):
+                    if recipient.get("type") == "chat":
+                        # 推送到群聊
                         await feishu_service.send_card_message(
-                            user_info["open_id"],
+                            recipient["chat_id"],
                             card,
-                            receive_id_type="open_id"
+                            receive_id_type="chat_id"
                         )
                         success_count += 1
                     else:
-                        errors.append(f"{recipient['name']}: 未找到飞书用户")
+                        # 推送到个人（通过邮箱获取open_id）
+                        user_info = await feishu_service.get_user_by_email(recipient["email"])
+                        if user_info and user_info.get("open_id"):
+                            await feishu_service.send_card_message(
+                                user_info["open_id"],
+                                card,
+                                receive_id_type="open_id"
+                            )
+                            success_count += 1
+                        else:
+                            errors.append(f"{recipient['name']}: 未找到飞书用户")
                 except Exception as e:
-                    errors.append(f"{recipient['name']}: {str(e)}")
-                    logger.error(f"推送给 {recipient['name']} 失败: {e}")
+                    name = recipient.get("name") or recipient.get("chat_id", "未知")
+                    errors.append(f"{name}: {str(e)}")
+                    logger.error(f"推送给 {name} 失败: {e}")
 
             # 更新历史记录
             result = await db.execute(
@@ -400,6 +456,12 @@ async def push_email_report(history_id: int, recipients: list, report_data: dict
     """邮件推送(Excel附件)"""
     from app.database import async_session
 
+    # 过滤只保留用户类型的接收人（群聊不支持邮件推送）
+    user_recipients = [r for r in recipients if r.get("type") == "user"]
+    if not user_recipients:
+        logger.warning("没有可用的邮件接收人（群聊不支持邮件推送）")
+        return
+
     async with async_session() as db:
         try:
             # 生成Excel文件
@@ -409,7 +471,7 @@ async def push_email_report(history_id: int, recipients: list, report_data: dict
             success_count = 0
             errors = []
 
-            for recipient in recipients:
+            for recipient in user_recipients:
                 try:
                     # 通过飞书邮件API发送
                     await feishu_service.send_email_with_attachment(
@@ -456,51 +518,191 @@ async def push_email_report(history_id: int, recipients: list, report_data: dict
 def build_report_card(report_data: dict, days: int) -> dict:
     """构建飞书卡片消息"""
     elements = []
+    is_custom_only = "custom" in report_data and len(report_data) == 1
 
-    # 标题
+    # 自定义内容单独推送时，不显示统计报表标题
+    if is_custom_only:
+        custom = report_data["custom"]
+        elements.append({
+            "tag": "markdown",
+            "content": custom.get('content', '')
+        })
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {"content": "📢 通知", "tag": "plain_text"},
+                "template": "orange"
+            },
+            "elements": elements
+        }
+
+    # 有统计数据时，显示报表标题
     elements.append({
         "tag": "markdown",
         "content": f"**📊 AI工具导航统计报表（近{days}天）**"
     })
 
-    elements.append({"tag": "hr"})
-
-    # 概览
-    if "overview" in report_data:
-        overview = report_data["overview"]
+    # 自定义内容放在报表数据前面
+    if "custom" in report_data:
+        custom = report_data["custom"]
+        elements.append({"tag": "hr"})
         elements.append({
             "tag": "markdown",
-            "content": (
-                f"**数据概览**\n"
-                f"• 总PV: {overview.get('total_pv', 0)}\n"
-                f"• 总UV: {overview.get('total_uv', 0)}\n"
-                f"• 今日PV: {overview.get('today_pv', 0)}\n"
-                f"• 今日UV: {overview.get('today_uv', 0)}"
-            )
+            "content": f"**📢 通知**\n{custom.get('content', '')}"
         })
 
-    # 工具排行
-    if "tools" in report_data and report_data["tools"]:
-        tools = report_data["tools"][:5]
-        tool_lines = "\n".join([
-            f"{i+1}. {t['tool_name']}: {t['click_count']}次"
-            for i, t in enumerate(tools)
-        ])
+    # 工具点击排行 - 表格形式
+    if "clicks" in report_data and report_data["clicks"]:
+        tools = report_data["clicks"][:5]
+        elements.append({"tag": "hr"})
         elements.append({
             "tag": "markdown",
-            "content": f"**🔥 工具排行 TOP5**\n{tool_lines}"
+            "content": "**🔥 工具点击 TOP5**"
+        })
+        # 使用表格组件
+        elements.append({
+            "tag": "table",
+            "page_size": 5,
+            "row_height": "low",
+            "header_style": {
+                "text_align": "center",
+                "text_size": "normal",
+                "background_style": "grey",
+                "text_color": "grey",
+                "bold": True
+            },
+            "columns": [
+                {"name": "rank", "display_name": "#", "width": "auto", "data_type": "text"},
+                {"name": "tool", "display_name": "工具", "width": "auto", "data_type": "text"},
+                {"name": "pv", "display_name": "PV", "width": "auto", "data_type": "number"},
+                {"name": "uv", "display_name": "UV", "width": "auto", "data_type": "number"}
+            ],
+            "rows": [
+                {"rank": str(i+1), "tool": t['tool_name'], "pv": t['click_count'], "uv": t['unique_users']}
+                for i, t in enumerate(tools)
+            ]
         })
 
-    # 用户排行
+    # 工具互动排行 - 表格形式
+    if "interactions" in report_data and report_data["interactions"]:
+        items = report_data["interactions"][:5]
+        elements.append({"tag": "hr"})
+        elements.append({
+            "tag": "markdown",
+            "content": "**💫 工具互动 TOP5**"
+        })
+        elements.append({
+            "tag": "table",
+            "page_size": 5,
+            "row_height": "low",
+            "header_style": {
+                "text_align": "center",
+                "text_size": "normal",
+                "background_style": "grey",
+                "text_color": "grey",
+                "bold": True
+            },
+            "columns": [
+                {"name": "rank", "display_name": "#", "width": "auto", "data_type": "text"},
+                {"name": "tool", "display_name": "工具", "width": "auto", "data_type": "text"},
+                {"name": "fav", "display_name": "⭐收藏", "width": "auto", "data_type": "number"},
+                {"name": "like", "display_name": "👍点赞", "width": "auto", "data_type": "number"}
+            ],
+            "rows": [
+                {"rank": str(i+1), "tool": t['tool_name'], "fav": t['favorite_count'], "like": t['like_count']}
+                for i, t in enumerate(items)
+            ]
+        })
+
+    # 提供者排行 - 表格形式
+    if "providers" in report_data and report_data["providers"]:
+        items = report_data["providers"][:5]
+        elements.append({"tag": "hr"})
+        elements.append({
+            "tag": "markdown",
+            "content": "**🏆 提供者排行 TOP5**"
+        })
+        elements.append({
+            "tag": "table",
+            "page_size": 5,
+            "row_height": "low",
+            "header_style": {
+                "text_align": "center",
+                "text_size": "normal",
+                "background_style": "grey",
+                "text_color": "grey",
+                "bold": True
+            },
+            "columns": [
+                {"name": "rank", "display_name": "#", "width": "auto", "data_type": "text"},
+                {"name": "provider", "display_name": "提供者", "width": "auto", "data_type": "text"},
+                {"name": "tools", "display_name": "工具数", "width": "auto", "data_type": "number"},
+                {"name": "clicks", "display_name": "点击数", "width": "auto", "data_type": "number"}
+            ],
+            "rows": [
+                {"rank": str(i+1), "provider": t['provider'], "tools": t['tool_count'], "clicks": t['click_count']}
+                for i, t in enumerate(items)
+            ]
+        })
+
+    # 用户排行 - 表格形式
     if "users" in report_data and report_data["users"]:
         users = report_data["users"][:5]
-        user_lines = "\n".join([
-            f"{i+1}. {u['user_name']}: {u['click_count']}次"
-            for i, u in enumerate(users)
-        ])
+        elements.append({"tag": "hr"})
         elements.append({
             "tag": "markdown",
-            "content": f"**👥 活跃用户 TOP5**\n{user_lines}"
+            "content": "**👥 活跃用户 TOP5**"
+        })
+        elements.append({
+            "tag": "table",
+            "page_size": 5,
+            "row_height": "low",
+            "header_style": {
+                "text_align": "center",
+                "text_size": "normal",
+                "background_style": "grey",
+                "text_color": "grey",
+                "bold": True
+            },
+            "columns": [
+                {"name": "rank", "display_name": "#", "width": "auto", "data_type": "text"},
+                {"name": "user", "display_name": "用户", "width": "auto", "data_type": "text"},
+                {"name": "clicks", "display_name": "点击次数", "width": "auto", "data_type": "number"}
+            ],
+            "rows": [
+                {"rank": str(i+1), "user": u['user_name'], "clicks": u['click_count']}
+                for i, u in enumerate(users)
+            ]
+        })
+
+    # 用户想要 - 表格形式
+    if "wants" in report_data and report_data["wants"]:
+        items = report_data["wants"][:5]
+        elements.append({"tag": "hr"})
+        elements.append({
+            "tag": "markdown",
+            "content": "**💡 用户想要 TOP5**"
+        })
+        elements.append({
+            "tag": "table",
+            "page_size": 5,
+            "row_height": "low",
+            "header_style": {
+                "text_align": "center",
+                "text_size": "normal",
+                "background_style": "grey",
+                "text_color": "grey",
+                "bold": True
+            },
+            "columns": [
+                {"name": "rank", "display_name": "#", "width": "auto", "data_type": "text"},
+                {"name": "tool", "display_name": "工具", "width": "auto", "data_type": "text"},
+                {"name": "count", "display_name": "想要人数", "width": "auto", "data_type": "number"}
+            ],
+            "rows": [
+                {"rank": str(i+1), "tool": t['tool_name'], "count": t['want_count']}
+                for i, t in enumerate(items)
+            ]
         })
 
     return {
@@ -522,60 +724,112 @@ def generate_report_excel(report_data: dict, days: int) -> bytes:
         raise HTTPException(status_code=500, detail="Excel库未安装")
 
     wb = openpyxl.Workbook()
+    first_sheet = True
 
-    # 概览Sheet
-    if "overview" in report_data:
-        ws = wb.active
-        ws.title = "数据概览"
-        overview = report_data["overview"]
-
-        headers = ["指标", "数值"]
+    def style_headers(ws, headers):
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
             cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
 
-        data = [
-            ("总PV", overview.get("total_pv", 0)),
-            ("总UV", overview.get("total_uv", 0)),
-            ("今日PV", overview.get("today_pv", 0)),
-            ("今日UV", overview.get("today_uv", 0)),
-            ("工具总数", overview.get("total_tools", 0)),
-        ]
-        for row, (label, value) in enumerate(data, 2):
-            ws.cell(row=row, column=1, value=label)
-            ws.cell(row=row, column=2, value=value)
-
-    # 工具排行Sheet
-    if "tools" in report_data and report_data["tools"]:
-        ws = wb.create_sheet("工具排行")
-        headers = ["排名", "工具名称", "点击次数"]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-            cell.font = Font(bold=True, color="FFFFFF")
-
-        for row, tool in enumerate(report_data["tools"], 2):
+    # 工具点击Sheet
+    if "clicks" in report_data and report_data["clicks"]:
+        if first_sheet:
+            ws = wb.active
+            ws.title = "工具点击"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("工具点击")
+        headers = ["排名", "工具名称", "提供者", "PV", "UV", "PV环比(%)", "UV环比(%)"]
+        style_headers(ws, headers)
+        for row, tool in enumerate(report_data["clicks"], 2):
             ws.cell(row=row, column=1, value=row - 1)
             ws.cell(row=row, column=2, value=tool.get("tool_name", ""))
-            ws.cell(row=row, column=3, value=tool.get("click_count", 0))
+            ws.cell(row=row, column=3, value=tool.get("provider", "-"))
+            ws.cell(row=row, column=4, value=tool.get("click_count", 0))
+            ws.cell(row=row, column=5, value=tool.get("unique_users", 0))
+            ws.cell(row=row, column=6, value=tool.get("pv_trend", 0))
+            ws.cell(row=row, column=7, value=tool.get("uv_trend", 0))
+
+    # 工具互动Sheet
+    if "interactions" in report_data and report_data["interactions"]:
+        if first_sheet:
+            ws = wb.active
+            ws.title = "工具互动"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("工具互动")
+        headers = ["排名", "工具名称", "提供者", "收藏数", "点赞数", "总计"]
+        style_headers(ws, headers)
+        for row, item in enumerate(report_data["interactions"], 2):
+            ws.cell(row=row, column=1, value=row - 1)
+            ws.cell(row=row, column=2, value=item.get("tool_name", ""))
+            ws.cell(row=row, column=3, value=item.get("provider", "-"))
+            ws.cell(row=row, column=4, value=item.get("favorite_count", 0))
+            ws.cell(row=row, column=5, value=item.get("like_count", 0))
+            ws.cell(row=row, column=6, value=item.get("total", 0))
+
+    # 提供者统计Sheet
+    if "providers" in report_data and report_data["providers"]:
+        if first_sheet:
+            ws = wb.active
+            ws.title = "提供者排行"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("提供者排行")
+        headers = ["排名", "提供者", "工具数", "点击数", "平均点击"]
+        style_headers(ws, headers)
+        for row, item in enumerate(report_data["providers"], 2):
+            avg = round(item.get("click_count", 0) / item.get("tool_count", 1)) if item.get("tool_count", 0) > 0 else 0
+            ws.cell(row=row, column=1, value=row - 1)
+            ws.cell(row=row, column=2, value=item.get("provider", ""))
+            ws.cell(row=row, column=3, value=item.get("tool_count", 0))
+            ws.cell(row=row, column=4, value=item.get("click_count", 0))
+            ws.cell(row=row, column=5, value=avg)
 
     # 用户统计Sheet
     if "users" in report_data and report_data["users"]:
-        ws = wb.create_sheet("用户统计")
-        headers = ["排名", "用户名", "访问次数"]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-            cell.font = Font(bold=True, color="FFFFFF")
-
+        if first_sheet:
+            ws = wb.active
+            ws.title = "用户分析"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("用户分析")
+        headers = ["排名", "用户", "点击次数", "环比(%)", "最后访问"]
+        style_headers(ws, headers)
         for row, user in enumerate(report_data["users"], 2):
             ws.cell(row=row, column=1, value=row - 1)
             ws.cell(row=row, column=2, value=user.get("user_name", ""))
             ws.cell(row=row, column=3, value=user.get("click_count", 0))
+            ws.cell(row=row, column=4, value=user.get("click_trend", 0))
+            ws.cell(row=row, column=5, value=user.get("last_click", ""))
+
+    # 用户想要Sheet
+    if "wants" in report_data and report_data["wants"]:
+        if first_sheet:
+            ws = wb.active
+            ws.title = "用户想要"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("用户想要")
+        headers = ["排名", "工具名称", "想要次数"]
+        style_headers(ws, headers)
+        for row, item in enumerate(report_data["wants"], 2):
+            ws.cell(row=row, column=1, value=row - 1)
+            ws.cell(row=row, column=2, value=item.get("tool_name", ""))
+            ws.cell(row=row, column=3, value=item.get("want_count", 0))
+
+    # 自定义内容Sheet
+    if "custom" in report_data:
+        if first_sheet:
+            ws = wb.active
+            ws.title = "自定义通知"
+            first_sheet = False
+        else:
+            ws = wb.create_sheet("自定义通知")
+        ws.cell(row=1, column=1, value="通知内容")
+        ws.cell(row=1, column=1).font = Font(bold=True)
+        ws.cell(row=2, column=1, value=report_data["custom"].get("content", ""))
 
     # 保存到字节流
     output = io.BytesIO()

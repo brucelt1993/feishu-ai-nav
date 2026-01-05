@@ -165,23 +165,36 @@ export const adminApi = {
 
   // 统计
   getOverview: () => api.get('/admin/stats/overview'),
+  getExtendedOverview: () => api.get('/admin/stats/overview-extended'),
   getToolStats: (days = 7, limit = 10) => api.get('/admin/stats/tools', { params: { days, limit } }),
   getUserStats: (days = 7, limit = 20) => api.get('/admin/stats/users', { params: { days, limit } }),
   getTrend: (days = 30) => api.get('/admin/stats/trend', { params: { days } }),
   getCategoryDistribution: () => api.get('/admin/stats/category-distribution'),
   getToolDetailStats: (toolId, days = 30) => api.get(`/admin/stats/tool/${toolId}`, { params: { days } }),
+  getToolInteractions: (limit = 20) => api.get('/admin/stats/tool-interactions', { params: { limit } }),
+  getProviderStats: (limit = 20) => api.get('/admin/stats/providers', { params: { limit } }),
+  getWantList: (limit = 50) => api.get('/admin/stats/want-list', { params: { limit } }),
 
   // 数据导出
-  exportToolsStats: (days = 30) => api.get('/admin/export/tools', {
-    params: { days },
+  exportToolsStats: (days = 30, startDate, endDate) => api.get('/admin/export/tools', {
+    params: { days, start_date: startDate, end_date: endDate },
     responseType: 'blob'
   }),
-  exportUsersStats: (days = 30) => api.get('/admin/export/users', {
-    params: { days },
+  exportUsersStats: (days = 30, startDate, endDate) => api.get('/admin/export/users', {
+    params: { days, start_date: startDate, end_date: endDate },
     responseType: 'blob'
   }),
   exportTrendStats: (days = 30) => api.get('/admin/export/trend', {
     params: { days },
+    responseType: 'blob'
+  }),
+  exportInteractionsStats: () => api.get('/admin/export/interactions', {
+    responseType: 'blob'
+  }),
+  exportProvidersStats: () => api.get('/admin/export/providers', {
+    responseType: 'blob'
+  }),
+  exportWantsStats: () => api.get('/admin/export/wants', {
     responseType: 'blob'
   }),
 
@@ -210,6 +223,7 @@ export const adminApi = {
   addReportRecipient: (data) => api.post('/admin/report-push/recipients', data),
   updateReportRecipient: (id, data) => api.put(`/admin/report-push/recipients/${id}`, data),
   deleteReportRecipient: (id) => api.delete(`/admin/report-push/recipients/${id}`),
+  getBotChats: () => api.get('/admin/report-push/chats'),
   getReportPushHistory: (page = 1, size = 10) => api.get('/admin/report-push/history', { params: { page, size } }),
   pushReport: (data) => api.post('/admin/report-push/push', data),
   previewReport: (data) => api.post('/admin/report-push/preview', data),

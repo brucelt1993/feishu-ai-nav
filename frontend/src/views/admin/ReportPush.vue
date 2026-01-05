@@ -25,10 +25,11 @@
 
           <el-form-item label="报表类型">
             <el-checkbox-group v-model="pushSettings.reportTypes">
-              <el-checkbox label="overview">数据概览</el-checkbox>
-              <el-checkbox label="tools">工具排行</el-checkbox>
-              <el-checkbox label="users">用户统计</el-checkbox>
-              <el-checkbox label="trend">使用趋势</el-checkbox>
+              <el-checkbox label="clicks">工具点击</el-checkbox>
+              <el-checkbox label="interactions">工具互动</el-checkbox>
+              <el-checkbox label="providers">提供者排行</el-checkbox>
+              <el-checkbox label="users">用户分析</el-checkbox>
+              <el-checkbox label="wants">用户想要</el-checkbox>
             </el-checkbox-group>
           </el-form-item>
 
@@ -49,11 +50,11 @@
       </el-form>
     </el-card>
 
-    <!-- 推送人员管理 -->
+    <!-- 推送人员和群聊管理 -->
     <el-card class="recipients-card">
       <template #header>
         <div class="card-header">
-          <span>推送人员</span>
+          <span>推送目标</span>
           <el-button type="primary" size="small" @click="showAddDialog = true">
             <el-icon><Plus /></el-icon>
             添加人员
@@ -61,37 +62,55 @@
         </div>
       </template>
 
-      <el-table :data="recipients" v-loading="loadingRecipients" empty-text="暂无推送人员">
+      <!-- 群聊选择 -->
+      <div class="section-title">
+        <el-icon><ChatDotRound /></el-icon>
+        群聊
+        <el-button text size="small" @click="loadChats" :loading="loadingChats">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+      <div class="chat-list" v-loading="loadingChats">
+        <el-checkbox-group v-model="selectedChatIds" v-if="chatList.length">
+          <el-checkbox
+            v-for="chat in chatList"
+            :key="chat.chat_id"
+            :label="chat.chat_id"
+            class="chat-item"
+          >
+            <div class="chat-info">
+              <el-avatar :size="24" :src="chat.avatar">
+                <el-icon><ChatDotSquare /></el-icon>
+              </el-avatar>
+              <span class="chat-name">{{ chat.name }}</span>
+            </div>
+          </el-checkbox>
+        </el-checkbox-group>
+        <el-empty v-else description="暂无已加入的群聊" :image-size="60" />
+      </div>
+
+      <!-- 人员列表 -->
+      <div class="section-title" style="margin-top: 24px;">
+        <el-icon><User /></el-icon>
+        人员
+      </div>
+      <el-table :data="recipients" v-loading="loadingRecipients" empty-text="暂无推送人员" size="small">
         <el-table-column prop="name" label="姓名" width="120" />
         <el-table-column prop="email" label="邮箱" min-width="200" />
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
               {{ row.is_active ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="添加时间" width="180">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              text
-              type="primary"
-              size="small"
-              @click="toggleStatus(row)"
-            >
+            <el-button text type="primary" size="small" @click="toggleStatus(row)">
               {{ row.is_active ? '禁用' : '启用' }}
             </el-button>
-            <el-button
-              text
-              type="danger"
-              size="small"
-              @click="handleDelete(row)"
-            >
+            <el-button text type="danger" size="small" @click="handleDelete(row)">
               删除
             </el-button>
           </template>
@@ -110,11 +129,23 @@
       <el-form :model="manualPush" label-width="120px">
         <el-form-item label="报表类型">
           <el-checkbox-group v-model="manualPush.reportTypes">
-            <el-checkbox label="overview">数据概览</el-checkbox>
-            <el-checkbox label="tools">工具排行</el-checkbox>
-            <el-checkbox label="users">用户统计</el-checkbox>
-            <el-checkbox label="trend">使用趋势</el-checkbox>
+            <el-checkbox label="clicks">工具点击</el-checkbox>
+            <el-checkbox label="interactions">工具互动</el-checkbox>
+            <el-checkbox label="providers">提供者排行</el-checkbox>
+            <el-checkbox label="users">用户分析</el-checkbox>
+            <el-checkbox label="wants">用户想要</el-checkbox>
+            <el-checkbox label="custom">自定义通知</el-checkbox>
           </el-checkbox-group>
+        </el-form-item>
+
+        <!-- 自定义内容输入框 -->
+        <el-form-item label="自定义内容" v-if="manualPush.reportTypes.includes('custom')">
+          <el-input
+            v-model="manualPush.customContent"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入自定义通知内容，如：最新上新了几款AI工具，通知到各位"
+          />
         </el-form-item>
 
         <el-form-item label="统计周期">
@@ -130,6 +161,23 @@
             <el-radio label="feishu">飞书消息</el-radio>
             <el-radio label="email">邮件(Excel附件)</el-radio>
           </el-radio-group>
+          <div class="form-tip" v-if="manualPush.method === 'email'">
+            邮件仅发送给人员，不支持群聊
+          </div>
+        </el-form-item>
+
+        <el-form-item label="推送目标">
+          <div class="push-target-summary">
+            <el-tag v-if="selectedChatIds.length" type="primary" size="small">
+              {{ selectedChatIds.length }} 个群聊
+            </el-tag>
+            <el-tag v-if="activeRecipientCount" type="success" size="small">
+              {{ activeRecipientCount }} 位人员
+            </el-tag>
+            <span v-if="!selectedChatIds.length && !activeRecipientCount" class="no-target">
+              未选择推送目标
+            </span>
+          </div>
         </el-form-item>
 
         <el-form-item>
@@ -159,7 +207,11 @@
             {{ formatDateTime(row.pushed_at) }}
           </template>
         </el-table-column>
-        <el-table-column prop="report_type" label="报表类型" width="120" />
+        <el-table-column prop="report_type" label="报表类型" min-width="150">
+          <template #default="{ row }">
+            {{ formatReportTypes(row.report_type) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="push_method" label="推送方式" width="100">
           <template #default="{ row }">
             <el-tag size="small" :type="row.push_method === 'feishu' ? 'primary' : 'success'">
@@ -167,8 +219,8 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="recipient_count" label="接收人数" width="100" />
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="recipient_count" label="接收数" width="80" />
+        <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small">
               {{ row.status === 'success' ? '成功' : '失败' }}
@@ -209,59 +261,85 @@
     </el-dialog>
 
     <!-- 预览弹窗 -->
-    <el-dialog v-model="showPreviewDialog" title="报表预览" width="800px">
+    <el-dialog v-model="showPreviewDialog" title="报表预览" width="900px">
       <div class="preview-content" v-loading="loadingPreview">
         <div v-if="previewData">
-          <!-- 概览 -->
-          <div class="preview-section" v-if="previewData.overview">
-            <h4>数据概览</h4>
-            <div class="overview-grid">
-              <div class="overview-item">
-                <span class="label">总PV</span>
-                <span class="value">{{ previewData.overview.total_pv }}</span>
-              </div>
-              <div class="overview-item">
-                <span class="label">总UV</span>
-                <span class="value">{{ previewData.overview.total_uv }}</span>
-              </div>
-              <div class="overview-item">
-                <span class="label">今日PV</span>
-                <span class="value">{{ previewData.overview.today_pv }}</span>
-              </div>
-              <div class="overview-item">
-                <span class="label">今日UV</span>
-                <span class="value">{{ previewData.overview.today_uv }}</span>
-              </div>
+          <!-- 自定义通知 -->
+          <div class="preview-section" v-if="previewData.custom">
+            <h4><el-icon><Bell /></el-icon> 自定义通知</h4>
+            <div class="custom-content">
+              {{ previewData.custom.content }}
             </div>
           </div>
 
-          <!-- 工具排行 -->
-          <div class="preview-section" v-if="previewData.tools?.length">
-            <h4>工具排行 TOP10</h4>
-            <el-table :data="previewData.tools" size="small">
-              <el-table-column type="index" label="排名" width="60" />
+          <!-- 工具点击 -->
+          <div class="preview-section" v-if="previewData.clicks?.length">
+            <h4><el-icon><DataLine /></el-icon> 工具点击 TOP10</h4>
+            <el-table :data="previewData.clicks" size="small">
+              <el-table-column type="index" label="#" width="50" />
               <el-table-column prop="tool_name" label="工具名称" />
-              <el-table-column prop="click_count" label="点击次数" width="100" />
+              <el-table-column prop="provider" label="提供者" width="100" />
+              <el-table-column prop="click_count" label="PV" width="80" />
+              <el-table-column prop="unique_users" label="UV" width="80" />
+              <el-table-column label="PV环比" width="100">
+                <template #default="{ row }">
+                  <span :class="row.pv_trend >= 0 ? 'trend-up' : 'trend-down'">
+                    {{ row.pv_trend >= 0 ? '+' : '' }}{{ row.pv_trend }}%
+                  </span>
+                </template>
+              </el-table-column>
             </el-table>
           </div>
 
-          <!-- 用户统计 -->
+          <!-- 工具互动 -->
+          <div class="preview-section" v-if="previewData.interactions?.length">
+            <h4><el-icon><Star /></el-icon> 工具互动 TOP10</h4>
+            <el-table :data="previewData.interactions" size="small">
+              <el-table-column type="index" label="#" width="50" />
+              <el-table-column prop="tool_name" label="工具名称" />
+              <el-table-column prop="provider" label="提供者" width="100" />
+              <el-table-column prop="favorite_count" label="收藏" width="80" />
+              <el-table-column prop="like_count" label="点赞" width="80" />
+              <el-table-column prop="total" label="总计" width="80" />
+            </el-table>
+          </div>
+
+          <!-- 提供者排行 -->
+          <div class="preview-section" v-if="previewData.providers?.length">
+            <h4><el-icon><Trophy /></el-icon> 提供者排行 TOP10</h4>
+            <el-table :data="previewData.providers" size="small">
+              <el-table-column type="index" label="#" width="50" />
+              <el-table-column prop="provider" label="提供者" />
+              <el-table-column prop="tool_count" label="工具数" width="100" />
+              <el-table-column prop="click_count" label="点击数" width="100" />
+            </el-table>
+          </div>
+
+          <!-- 用户分析 -->
           <div class="preview-section" v-if="previewData.users?.length">
-            <h4>活跃用户 TOP10</h4>
+            <h4><el-icon><User /></el-icon> 活跃用户 TOP10</h4>
             <el-table :data="previewData.users" size="small">
-              <el-table-column type="index" label="排名" width="60" />
+              <el-table-column type="index" label="#" width="50" />
               <el-table-column prop="user_name" label="用户名" />
-              <el-table-column prop="click_count" label="访问次数" width="100" />
+              <el-table-column prop="click_count" label="点击次数" width="100" />
+              <el-table-column label="环比" width="100">
+                <template #default="{ row }">
+                  <span :class="row.click_trend >= 0 ? 'trend-up' : 'trend-down'">
+                    {{ row.click_trend >= 0 ? '+' : '' }}{{ row.click_trend }}%
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="last_click" label="最后访问" width="150" />
             </el-table>
           </div>
 
-          <!-- 使用趋势 -->
-          <div class="preview-section" v-if="previewData.trend?.length">
-            <h4>使用趋势</h4>
-            <el-table :data="previewData.trend" size="small" max-height="300">
-              <el-table-column prop="date" label="日期" width="120" />
-              <el-table-column prop="pv" label="PV" width="100" />
-              <el-table-column prop="uv" label="UV" width="100" />
+          <!-- 用户想要 -->
+          <div class="preview-section" v-if="previewData.wants?.length">
+            <h4><el-icon><Pointer /></el-icon> 用户想要 TOP10</h4>
+            <el-table :data="previewData.wants" size="small">
+              <el-table-column type="index" label="#" width="50" />
+              <el-table-column prop="tool_name" label="工具名称" />
+              <el-table-column prop="want_count" label="想要次数" width="100" />
             </el-table>
           </div>
         </div>
@@ -274,16 +352,34 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Promotion, View } from '@element-plus/icons-vue'
+import {
+  Plus, Promotion, View, Refresh, User,
+  ChatDotRound, ChatDotSquare, Bell, DataLine,
+  Star, Trophy, Pointer
+} from '@element-plus/icons-vue'
 import { adminApi } from '@/api'
+
+// 报表类型映射
+const REPORT_TYPE_NAMES = {
+  clicks: '工具点击',
+  interactions: '工具互动',
+  providers: '提供者排行',
+  users: '用户分析',
+  wants: '用户想要',
+  custom: '自定义通知',
+  // 兼容旧数据
+  overview: '数据概览',
+  tools: '工具排行',
+  trend: '使用趋势'
+}
 
 // 推送设置
 const pushSettings = reactive({
   enabled: false,
   pushTime: null,
-  reportTypes: ['overview', 'tools'],
+  reportTypes: ['clicks', 'users'],
   days: 7
 })
 const saving = ref(false)
@@ -306,11 +402,22 @@ const recipientRules = {
   ]
 }
 
+// 群聊
+const chatList = ref([])
+const loadingChats = ref(false)
+const selectedChatIds = ref([])
+
+// 活跃人员数量
+const activeRecipientCount = computed(() => {
+  return recipients.value.filter(r => r.is_active).length
+})
+
 // 手动推送
 const manualPush = reactive({
-  reportTypes: ['overview', 'tools'],
+  reportTypes: ['clicks', 'users'],
   days: 7,
-  method: 'feishu'
+  method: 'feishu',
+  customContent: ''
 })
 const pushing = ref(false)
 
@@ -328,15 +435,31 @@ const previewData = ref(null)
 onMounted(() => {
   loadSettings()
   loadRecipients()
+  loadChats()
   loadHistory()
 })
+
+// 加载群聊列表
+async function loadChats() {
+  loadingChats.value = true
+  try {
+    chatList.value = await adminApi.getBotChats()
+  } catch (e) {
+    console.error('加载群聊列表失败:', e)
+  } finally {
+    loadingChats.value = false
+  }
+}
 
 // 加载设置
 async function loadSettings() {
   try {
     const data = await adminApi.getReportPushSettings()
     pushSettings.enabled = data.enabled
-    pushSettings.reportTypes = data.report_types || ['overview', 'tools']
+    // 将旧类型映射到新类型
+    const oldToNew = { overview: 'clicks', tools: 'clicks', trend: 'users' }
+    const types = (data.report_types || ['clicks', 'users']).map(t => oldToNew[t] || t)
+    pushSettings.reportTypes = [...new Set(types)]
     pushSettings.days = data.days || 7
     if (data.push_time) {
       const [hour, minute] = data.push_time.split(':')
@@ -451,8 +574,13 @@ async function handlePush() {
     return
   }
 
-  if (recipients.value.filter(r => r.is_active).length === 0) {
-    ElMessage.warning('请先添加推送人员')
+  if (manualPush.reportTypes.includes('custom') && !manualPush.customContent.trim()) {
+    ElMessage.warning('请输入自定义通知内容')
+    return
+  }
+
+  if (selectedChatIds.value.length === 0 && activeRecipientCount.value === 0) {
+    ElMessage.warning('请选择推送目标（群聊或人员）')
     return
   }
 
@@ -461,7 +589,9 @@ async function handlePush() {
     await adminApi.pushReport({
       report_types: manualPush.reportTypes,
       days: manualPush.days,
-      method: manualPush.method
+      method: manualPush.method,
+      chat_ids: selectedChatIds.value,
+      custom_content: manualPush.reportTypes.includes('custom') ? manualPush.customContent : null
     })
     ElMessage.success('推送任务已提交')
     // 后台任务需要时间执行，延迟刷新历史
@@ -487,13 +617,20 @@ async function handlePreview() {
   try {
     previewData.value = await adminApi.previewReport({
       report_types: manualPush.reportTypes,
-      days: manualPush.days
+      days: manualPush.days,
+      custom_content: manualPush.reportTypes.includes('custom') ? manualPush.customContent : null
     })
   } catch (e) {
     ElMessage.error('加载预览失败')
   } finally {
     loadingPreview.value = false
   }
+}
+
+// 格式化报表类型
+function formatReportTypes(types) {
+  if (!types) return ''
+  return types.split(',').map(t => REPORT_TYPE_NAMES[t] || t).join('、')
 }
 
 // 格式化日期
@@ -540,6 +677,62 @@ function formatDateTime(dateStr) {
   margin-top: 4px;
 }
 
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+  margin-bottom: 12px;
+}
+
+.section-title .el-icon {
+  color: #667eea;
+}
+
+.chat-list {
+  background: var(--bg-tertiary, #f8fafc);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 80px;
+}
+
+.chat-list .el-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.chat-item {
+  margin-right: 0 !important;
+}
+
+.chat-item :deep(.el-checkbox__label) {
+  padding-left: 8px;
+}
+
+.chat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-name {
+  font-size: 13px;
+}
+
+.push-target-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.no-target {
+  font-size: 13px;
+  color: var(--text-muted, #94a3b8);
+}
+
 .pagination-wrap {
   display: flex;
   justify-content: flex-end;
@@ -562,39 +755,39 @@ function formatDateTime(dateStr) {
   color: var(--text-primary, #1e293b);
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color, #e2e8f0);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+.preview-section h4 .el-icon {
+  color: #667eea;
 }
 
-.overview-item {
-  background: var(--bg-tertiary, #f1f5f9);
+.custom-content {
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
   padding: 16px;
   border-radius: 12px;
-  text-align: center;
-}
-
-.overview-item .label {
-  display: block;
-  font-size: 13px;
-  color: var(--text-muted, #94a3b8);
-  margin-bottom: 8px;
-}
-
-.overview-item .value {
-  display: block;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 14px;
   color: var(--text-primary, #1e293b);
+  line-height: 1.6;
+  border-left: 4px solid #667eea;
+}
+
+.trend-up {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.trend-down {
+  color: #ef4444;
+  font-weight: 500;
 }
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .overview-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .chat-list .el-checkbox-group {
+    flex-direction: column;
   }
 }
 </style>

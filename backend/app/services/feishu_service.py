@@ -189,6 +189,50 @@ class FeishuService:
             logger.info(f"消息发送成功: {receive_id}")
             return data
 
+    async def get_bot_joined_chats(self) -> list:
+        """获取机器人已加入的群聊列表"""
+        token = await self.get_tenant_access_token()
+        url = f"{self.BASE_URL}/im/v1/chats"
+
+        all_chats = []
+        page_token = None
+
+        async with httpx.AsyncClient() as client:
+            while True:
+                params = {"page_size": 100}
+                if page_token:
+                    params["page_token"] = page_token
+
+                response = await client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    params=params,
+                )
+                data = response.json()
+
+                if data.get("code") != 0:
+                    logger.error(f"获取群聊列表失败: {data}")
+                    raise Exception(f"获取群聊列表失败: {data.get('msg')}")
+
+                items = data.get("data", {}).get("items", [])
+                for chat in items:
+                    all_chats.append({
+                        "chat_id": chat.get("chat_id"),
+                        "name": chat.get("name"),
+                        "avatar": chat.get("avatar"),
+                        "owner_id": chat.get("owner_id"),
+                        "chat_mode": chat.get("chat_mode"),  # group/p2p
+                        "chat_type": chat.get("chat_type"),  # private/public
+                    })
+
+                # 检查是否有更多页
+                page_token = data.get("data", {}).get("page_token")
+                if not page_token or not data.get("data", {}).get("has_more"):
+                    break
+
+        logger.info(f"获取到 {len(all_chats)} 个群聊")
+        return all_chats
+
     async def get_user_by_email(self, email: str) -> Optional[dict]:
         """通过邮箱获取用户信息"""
         token = await self.get_tenant_access_token()

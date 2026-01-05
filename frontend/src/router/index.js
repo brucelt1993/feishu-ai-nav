@@ -48,7 +48,7 @@ const routes = [
         path: 'stats',
         name: 'Stats',
         component: () => import('@/views/admin/Stats.vue'),
-        meta: { title: '统计分析' }
+        meta: { title: '数据报表' }
       },
       {
         path: 'feedback',

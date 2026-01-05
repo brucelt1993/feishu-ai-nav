@@ -327,6 +327,16 @@ async def get_stats_overview(
     return await service.get_overview()
 
 
+@router.get("/stats/overview-extended")
+async def get_extended_overview(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取扩展的统计概览（含互动数据和环比）"""
+    service = StatsService(db)
+    return await service.get_extended_overview()
+
+
 @router.get("/stats/tools")
 async def get_tool_stats(
     days: int = 7,
@@ -384,6 +394,39 @@ async def get_tool_detail_stats(
     return await service.get_tool_detail_stats(tool_id=tool_id, days=days)
 
 
+@router.get("/stats/tool-interactions")
+async def get_tool_interactions(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取工具点赞收藏统计"""
+    service = StatsService(db)
+    return await service.get_tool_interactions(limit=limit)
+
+
+@router.get("/stats/providers")
+async def get_provider_stats(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取提供者统计（工具数和点击数）"""
+    service = StatsService(db)
+    return await service.get_provider_stats(limit=limit)
+
+
+@router.get("/stats/want-list")
+async def get_want_list(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取用户想要的工具列表"""
+    service = StatsService(db)
+    return await service.get_want_list(limit=limit)
+
+
 # ============ 数据导出 ============
 
 @router.get("/export/tools")
@@ -433,6 +476,57 @@ async def export_trend_stats(
     content = await service.export_trend_stats(days=days)
 
     filename = f"trend_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/interactions")
+async def export_interactions_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出工具互动统计报表"""
+    service = ExportService(db)
+    content = await service.export_interactions_stats()
+
+    filename = f"interactions_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/providers")
+async def export_providers_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出提供者统计报表"""
+    service = ExportService(db)
+    content = await service.export_providers_stats()
+
+    filename = f"providers_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/wants")
+async def export_wants_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出用户想要统计报表"""
+    service = ExportService(db)
+    content = await service.export_wants_stats()
+
+    filename = f"wants_stats_{date.today().isoformat()}.xlsx"
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy import select, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from ..models import Tool, User, Category, ClickLog, UserFavorite, UserLike
+from ..models import Tool, User, Category, ClickLog, UserFavorite, UserLike, ToolFeedback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,61 +20,69 @@ class ExportService:
         self.db = db
 
     async def export_tools_stats(self, days: int = 30) -> bytes:
-        """导出工具统计报表"""
-        start_date = datetime.now() - timedelta(days=days)
+        """导出工具点击统计报表（与页面字段一致）"""
+        now = datetime.now()
+        current_start = now - timedelta(days=days)
+        previous_start = current_start - timedelta(days=days)
 
-        # 查询工具统计数据
-        query = (
+        # 当前周期统计
+        current_query = (
             select(
                 Tool.id,
                 Tool.name,
-                Category.name.label("category_name"),
+                Tool.provider,
                 func.count(ClickLog.id).label("pv"),
                 func.count(distinct(ClickLog.user_id)).label("uv"),
             )
-            .outerjoin(Category, Tool.category_id == Category.id)
-            .outerjoin(ClickLog, Tool.id == ClickLog.tool_id)
-            .where(Tool.is_active == True)
-            .group_by(Tool.id, Tool.name, Category.name)
+            .join(ClickLog, Tool.id == ClickLog.tool_id)
+            .where(ClickLog.clicked_at >= current_start)
+            .group_by(Tool.id, Tool.name, Tool.provider)
             .order_by(func.count(ClickLog.id).desc())
         )
+        current_result = await self.db.execute(current_query)
+        current_rows = current_result.all()
 
-        result = await self.db.execute(query)
-        rows = result.all()
+        # 获取上周期数据用于计算环比
+        tool_ids = [row.id for row in current_rows]
+        previous_stats = {}
+        if tool_ids:
+            previous_query = (
+                select(
+                    ClickLog.tool_id,
+                    func.count(ClickLog.id).label("pv"),
+                    func.count(distinct(ClickLog.user_id)).label("uv"),
+                )
+                .where(
+                    ClickLog.tool_id.in_(tool_ids),
+                    ClickLog.clicked_at >= previous_start,
+                    ClickLog.clicked_at < current_start
+                )
+                .group_by(ClickLog.tool_id)
+            )
+            previous_result = await self.db.execute(previous_query)
+            for row in previous_result.all():
+                previous_stats[row.tool_id] = {"pv": row.pv, "uv": row.uv}
 
-        # 获取收藏和点赞数
-        fav_query = (
-            select(UserFavorite.tool_id, func.count(UserFavorite.id).label("count"))
-            .group_by(UserFavorite.tool_id)
-        )
-        fav_result = await self.db.execute(fav_query)
-        fav_map = {row.tool_id: row.count for row in fav_result.all()}
-
-        like_query = (
-            select(UserLike.tool_id, func.count(UserLike.id).label("count"))
-            .group_by(UserLike.tool_id)
-        )
-        like_result = await self.db.execute(like_query)
-        like_map = {row.tool_id: row.count for row in like_result.all()}
+        def calc_trend(current, previous):
+            if previous == 0:
+                return 100.0 if current > 0 else 0.0
+            return round((current - previous) / previous * 100, 1)
 
         # 创建 Excel
         wb = Workbook()
         ws = wb.active
-        ws.title = "工具统计"
+        ws.title = "工具点击统计"
 
-        # 表头样式
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
         header_alignment = Alignment(horizontal="center", vertical="center")
         thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
         )
 
-        # 写入表头
-        headers = ["工具ID", "工具名称", "分类", "PV(浏览量)", "UV(独立访客)", "收藏数", "点赞数"]
+        # 写入表头（与页面一致）
+        headers = ["排名", "工具名称", "提供者", "PV", "UV", "PV环比(%)", "UV环比(%)"]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = header_font
@@ -83,84 +91,76 @@ class ExportService:
             cell.border = thin_border
 
         # 写入数据
-        for row_idx, row in enumerate(rows, 2):
-            ws.cell(row=row_idx, column=1, value=row.id).border = thin_border
+        for row_idx, row in enumerate(current_rows, 2):
+            prev = previous_stats.get(row.id, {"pv": 0, "uv": 0})
+            pv_trend = calc_trend(row.pv, prev["pv"])
+            uv_trend = calc_trend(row.uv, prev["uv"])
+
+            ws.cell(row=row_idx, column=1, value=row_idx - 1).border = thin_border
             ws.cell(row=row_idx, column=2, value=row.name).border = thin_border
-            ws.cell(row=row_idx, column=3, value=row.category_name or "未分类").border = thin_border
+            ws.cell(row=row_idx, column=3, value=row.provider or "-").border = thin_border
             ws.cell(row=row_idx, column=4, value=row.pv or 0).border = thin_border
             ws.cell(row=row_idx, column=5, value=row.uv or 0).border = thin_border
-            ws.cell(row=row_idx, column=6, value=fav_map.get(row.id, 0)).border = thin_border
-            ws.cell(row=row_idx, column=7, value=like_map.get(row.id, 0)).border = thin_border
+            ws.cell(row=row_idx, column=6, value=pv_trend).border = thin_border
+            ws.cell(row=row_idx, column=7, value=uv_trend).border = thin_border
 
         # 调整列宽
-        column_widths = [10, 25, 15, 15, 15, 12, 12]
+        column_widths = [8, 25, 15, 12, 12, 12, 12]
         for col, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = width
 
-        # 保存到内存
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
         return output.read()
 
     async def export_users_stats(self, days: int = 30) -> bytes:
-        """导出用户统计报表"""
-        start_date = datetime.now() - timedelta(days=days)
+        """导出用户分析报表（与页面字段一致）"""
+        now = datetime.now()
+        current_start = now - timedelta(days=days)
+        previous_start = current_start - timedelta(days=days)
 
-        # 查询用户统计数据
-        query = (
+        # 当前周期统计
+        current_query = (
             select(
                 User.id,
                 User.name,
-                User.department,
-                User.first_visit_at,
-                User.last_visit_at,
-                User.visit_count,
                 func.count(ClickLog.id).label("click_count"),
-                func.count(distinct(ClickLog.tool_id)).label("tool_count"),
+                func.max(ClickLog.clicked_at).label("last_click"),
             )
-            .outerjoin(ClickLog, User.id == ClickLog.user_id)
-            .group_by(User.id, User.name, User.department, User.first_visit_at, User.last_visit_at, User.visit_count)
+            .join(ClickLog, User.id == ClickLog.user_id)
+            .where(ClickLog.clicked_at >= current_start)
+            .group_by(User.id, User.name)
             .order_by(func.count(ClickLog.id).desc())
         )
+        current_result = await self.db.execute(current_query)
+        current_rows = current_result.all()
 
-        result = await self.db.execute(query)
-        rows = result.all()
+        # 获取上周期数据用于计算环比
+        user_ids = [row.id for row in current_rows]
+        previous_stats = {}
+        if user_ids:
+            previous_query = (
+                select(
+                    ClickLog.user_id,
+                    func.count(ClickLog.id).label("click_count"),
+                )
+                .where(
+                    ClickLog.user_id.in_(user_ids),
+                    ClickLog.clicked_at >= previous_start,
+                    ClickLog.clicked_at < current_start
+                )
+                .group_by(ClickLog.user_id)
+            )
+            previous_result = await self.db.execute(previous_query)
+            for row in previous_result.all():
+                previous_stats[row.user_id] = row.click_count
 
-        # 获取收藏数
-        fav_query = (
-            select(UserFavorite.user_id, func.count(UserFavorite.id).label("count"))
-            .group_by(UserFavorite.user_id)
-        )
-        fav_result = await self.db.execute(fav_query)
-        fav_map = {row.user_id: row.count for row in fav_result.all()}
+        def calc_trend(current, previous):
+            if previous == 0:
+                return 100.0 if current > 0 else 0.0
+            return round((current - previous) / previous * 100, 1)
 
-        # 创建 Excel
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "用户统计"
-
-        # 表头样式
-        header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
-        header_alignment = Alignment(horizontal="center", vertical="center")
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-
-        # 写入表头
-        headers = ["用户ID", "用户名", "部门", "首次访问", "最后访问", "访问次数", "点击数", "使用工具数", "收藏数"]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
-
-        # 写入数据
         def format_datetime(dt):
             if not dt:
                 return ""
@@ -168,23 +168,44 @@ class ExportService:
                 return dt[:16]
             return dt.strftime("%Y-%m-%d %H:%M")
 
-        for row_idx, row in enumerate(rows, 2):
-            ws.cell(row=row_idx, column=1, value=row.id).border = thin_border
-            ws.cell(row=row_idx, column=2, value=row.name or "未知").border = thin_border
-            ws.cell(row=row_idx, column=3, value=row.department or "").border = thin_border
-            ws.cell(row=row_idx, column=4, value=format_datetime(row.first_visit_at)).border = thin_border
-            ws.cell(row=row_idx, column=5, value=format_datetime(row.last_visit_at)).border = thin_border
-            ws.cell(row=row_idx, column=6, value=row.visit_count or 0).border = thin_border
-            ws.cell(row=row_idx, column=7, value=row.click_count or 0).border = thin_border
-            ws.cell(row=row_idx, column=8, value=row.tool_count or 0).border = thin_border
-            ws.cell(row=row_idx, column=9, value=fav_map.get(row.id, 0)).border = thin_border
+        # 创建 Excel
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "用户分析"
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+
+        # 写入表头（与页面一致）
+        headers = ["排名", "用户", "点击次数", "环比(%)", "最后访问"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        # 写入数据
+        for row_idx, row in enumerate(current_rows, 2):
+            prev_clicks = previous_stats.get(row.id, 0)
+            click_trend = calc_trend(row.click_count, prev_clicks)
+
+            ws.cell(row=row_idx, column=1, value=row_idx - 1).border = thin_border
+            ws.cell(row=row_idx, column=2, value=row.name or "未知用户").border = thin_border
+            ws.cell(row=row_idx, column=3, value=row.click_count or 0).border = thin_border
+            ws.cell(row=row_idx, column=4, value=click_trend).border = thin_border
+            ws.cell(row=row_idx, column=5, value=format_datetime(row.last_click)).border = thin_border
 
         # 调整列宽
-        column_widths = [10, 20, 20, 18, 18, 12, 12, 14, 12]
+        column_widths = [8, 20, 12, 12, 18]
         for col, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = width
 
-        # 保存到内存
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -247,6 +268,189 @@ class ExportService:
             ws.column_dimensions[get_column_letter(col)].width = width
 
         # 保存到内存
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output.read()
+
+    async def export_interactions_stats(self) -> bytes:
+        """导出工具互动统计报表"""
+        # 收藏统计子查询
+        fav_subq = (
+            select(
+                UserFavorite.tool_id,
+                func.count(UserFavorite.id).label("fav_count")
+            )
+            .group_by(UserFavorite.tool_id)
+            .subquery()
+        )
+        # 点赞统计子查询
+        like_subq = (
+            select(
+                UserLike.tool_id,
+                func.count(UserLike.id).label("like_count")
+            )
+            .group_by(UserLike.tool_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                Tool.id,
+                Tool.name,
+                Tool.provider,
+                func.coalesce(fav_subq.c.fav_count, 0).label("favorite_count"),
+                func.coalesce(like_subq.c.like_count, 0).label("like_count"),
+            )
+            .outerjoin(fav_subq, Tool.id == fav_subq.c.tool_id)
+            .outerjoin(like_subq, Tool.id == like_subq.c.tool_id)
+            .where(Tool.is_active == True)
+            .order_by(
+                (func.coalesce(fav_subq.c.fav_count, 0) + func.coalesce(like_subq.c.like_count, 0)).desc()
+            )
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        # 创建 Excel
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "工具互动统计"
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+
+        headers = ["工具ID", "工具名称", "提供者", "收藏数", "点赞数", "总计"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        for row_idx, row in enumerate(rows, 2):
+            ws.cell(row=row_idx, column=1, value=row.id).border = thin_border
+            ws.cell(row=row_idx, column=2, value=row.name).border = thin_border
+            ws.cell(row=row_idx, column=3, value=row.provider or "-").border = thin_border
+            ws.cell(row=row_idx, column=4, value=row.favorite_count).border = thin_border
+            ws.cell(row=row_idx, column=5, value=row.like_count).border = thin_border
+            ws.cell(row=row_idx, column=6, value=row.favorite_count + row.like_count).border = thin_border
+
+        column_widths = [10, 25, 15, 12, 12, 12]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output.read()
+
+    async def export_providers_stats(self) -> bytes:
+        """导出提供者统计报表"""
+        query = (
+            select(
+                Tool.provider,
+                func.count(Tool.id).label("tool_count"),
+                func.count(ClickLog.id).label("click_count"),
+            )
+            .outerjoin(ClickLog, Tool.id == ClickLog.tool_id)
+            .where(Tool.is_active == True)
+            .where(Tool.provider.isnot(None))
+            .where(Tool.provider != "")
+            .group_by(Tool.provider)
+            .order_by(func.count(Tool.id).desc())
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "提供者统计"
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+
+        headers = ["提供者", "贡献工具数", "总点击数", "平均点击"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        for row_idx, row in enumerate(rows, 2):
+            avg_clicks = round(row.click_count / row.tool_count) if row.tool_count > 0 else 0
+            ws.cell(row=row_idx, column=1, value=row.provider).border = thin_border
+            ws.cell(row=row_idx, column=2, value=row.tool_count).border = thin_border
+            ws.cell(row=row_idx, column=3, value=row.click_count).border = thin_border
+            ws.cell(row=row_idx, column=4, value=avg_clicks).border = thin_border
+
+        column_widths = [20, 15, 15, 15]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output.read()
+
+    async def export_wants_stats(self) -> bytes:
+        """导出用户想要统计报表"""
+        query = (
+            select(
+                ToolFeedback.tool_name,
+                func.count(ToolFeedback.id).label("want_count"),
+            )
+            .where(ToolFeedback.feedback_type == "want")
+            .where(ToolFeedback.tool_name.isnot(None))
+            .where(ToolFeedback.tool_name != "")
+            .group_by(ToolFeedback.tool_name)
+            .order_by(func.count(ToolFeedback.id).desc())
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "用户想要"
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+
+        headers = ["工具名称", "想要次数"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        for row_idx, row in enumerate(rows, 2):
+            ws.cell(row=row_idx, column=1, value=row.tool_name).border = thin_border
+            ws.cell(row=row_idx, column=2, value=row.want_count).border = thin_border
+
+        column_widths = [30, 15]
+        for col, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
