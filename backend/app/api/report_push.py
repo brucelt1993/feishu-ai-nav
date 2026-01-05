@@ -541,7 +541,7 @@ def generate_report_excel(report_data: dict, days: int) -> bytes:
             ("总UV", overview.get("total_uv", 0)),
             ("今日PV", overview.get("today_pv", 0)),
             ("今日UV", overview.get("today_uv", 0)),
-            ("工具总数", overview.get("tool_count", 0)),
+            ("工具总数", overview.get("total_tools", 0)),
         ]
         for row, (label, value) in enumerate(data, 2):
             ws.cell(row=row, column=1, value=label)

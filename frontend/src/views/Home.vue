@@ -452,6 +452,11 @@ onMounted(async () => {
   fetchHistory()  // 加载搜索历史
   loadTags()      // 加载标签
 
+  // 如果当前是全局模式，加载全部工具（解决从其他页面返回时不刷新的问题）
+  if (currentMode.value === 'global') {
+    await loadGlobalTools()
+  }
+
   // 飞书环境自动登录
   console.log('检测飞书环境:', isInFeishu(), 'UA:', navigator.userAgent)
 

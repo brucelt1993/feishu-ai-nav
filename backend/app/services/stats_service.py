@@ -52,8 +52,8 @@ class StatsService:
         return {
             "today_pv": today_pv,
             "today_uv": today_uv,
-            "total_clicks": total_pv,  # 总点击数
-            "total_users": total_uv,   # 总用户数
+            "total_pv": total_pv,      # 总PV
+            "total_uv": total_uv,      # 总UV
             "total_tools": total_tools,
             "new_users_today": new_users_today,
         }

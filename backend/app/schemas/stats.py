@@ -8,8 +8,8 @@ class StatsOverview(BaseModel):
     """统计概览"""
     today_pv: int
     today_uv: int
-    total_clicks: int  # 总点击数
-    total_users: int   # 总用户数
+    total_pv: int      # 总PV
+    total_uv: int      # 总UV
     total_tools: int
     new_users_today: int
 

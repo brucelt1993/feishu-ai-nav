@@ -463,8 +463,11 @@ async function handlePush() {
       days: manualPush.days,
       method: manualPush.method
     })
-    ElMessage.success('推送成功')
-    loadHistory()
+    ElMessage.success('推送任务已提交')
+    // 后台任务需要时间执行，延迟刷新历史
+    setTimeout(() => {
+      loadHistory()
+    }, 3000)
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '推送失败')
   } finally {

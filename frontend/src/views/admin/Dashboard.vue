@@ -27,8 +27,8 @@
           <el-icon><Histogram /></el-icon>
         </div>
         <div class="stat-info">
-          <div class="stat-value">{{ stats.total_clicks || 0 }}</div>
-          <div class="stat-label">总点击</div>
+          <div class="stat-value">{{ stats.total_pv || 0 }}</div>
+          <div class="stat-label">总PV</div>
         </div>
       </div>
 
@@ -37,8 +37,8 @@
           <el-icon><UserFilled /></el-icon>
         </div>
         <div class="stat-info">
-          <div class="stat-value">{{ stats.total_users || 0 }}</div>
-          <div class="stat-label">总用户</div>
+          <div class="stat-value">{{ stats.total_uv || 0 }}</div>
+          <div class="stat-label">总UV</div>
         </div>
       </div>
     </div>

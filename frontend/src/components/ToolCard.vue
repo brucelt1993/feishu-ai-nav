@@ -579,6 +579,7 @@ function handleWantSuccess() {
 .action-text {
   font-weight: 600;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* 深色模式适配 */
