@@ -476,6 +476,9 @@ function handleWantSuccess() {
   justify-content: center;
   gap: 6px;
   padding: 10px 14px;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
   border: 1.5px solid transparent;
   border-radius: 12px;
   background: var(--bg-tertiary, #f1f5f9);
@@ -665,6 +668,9 @@ function handleWantSuccess() {
 
   .action-btn {
     padding: 10px 8px;
+    height: auto;
+    min-height: auto;
+    max-height: none;
     border-radius: 10px;
     flex-direction: column;
     gap: 4px;
