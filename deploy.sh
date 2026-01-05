@@ -25,7 +25,7 @@ log_info "项目目录: $PROJECT_DIR"
 
 # 1. 拉取最新代码
 log_info "拉取最新代码..."
-git fetch origin
+git pull
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master)
 
