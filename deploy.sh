@@ -37,19 +37,9 @@ else
     log_info "代码更新完成"
 fi
 
-# 2. 检查 .env 文件
-if [ ! -f ".env" ]; then
-    log_warn ".env 文件不存在，从模板创建..."
-    if [ -f ".env.example" ]; then
-        cp .env.example .env
-        log_warn "请编辑 .env 文件配置必要参数后重新运行"
-        exit 1
-    fi
-fi
-
 # 3. 构建并启动容器
 log_info "构建 Docker 镜像..."
-docker-compose build --no-cache
+docker compose build frontend backend
 
 log_info "停止旧容器..."
 docker-compose down --remove-orphans 2>/dev/null || true
