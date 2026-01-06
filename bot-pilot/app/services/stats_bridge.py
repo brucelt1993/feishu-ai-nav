@@ -189,13 +189,25 @@ class StatsBridge:
         获取工具详情
         """
         async with async_session() as session:
-            # 模糊搜索工具
-            query = text("""
-                SELECT id, name, description, icon_url, target_url, provider
-                FROM tools
-                WHERE name LIKE :name
-                LIMIT 1
-            """)
+            # 模糊搜索工具（大小写不敏感）
+            from app.config import settings
+
+            if settings.is_sqlite:
+                # SQLite 的 LIKE 默认大小写不敏感
+                query = text("""
+                    SELECT id, name, description, icon_url, target_url, provider
+                    FROM tools
+                    WHERE name LIKE :name AND is_active = 1
+                    LIMIT 1
+                """)
+            else:
+                # PostgreSQL 用 ILIKE 实现大小写不敏感
+                query = text("""
+                    SELECT id, name, description, icon_url, target_url, provider
+                    FROM tools
+                    WHERE name ILIKE :name AND is_active = 1
+                    LIMIT 1
+                """)
 
             result = await session.execute(query, {"name": f"%{tool_name}%"})
             tool = result.fetchone()
@@ -307,22 +319,29 @@ class StatsBridge:
         搜索工具
         """
         async with async_session() as session:
+            from app.config import settings
+
+            # 根据数据库类型选择 LIKE 或 ILIKE
+            like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+
             if category:
-                query = text("""
+                query = text(f"""
                     SELECT t.id, t.name, t.description, t.icon_url, c.name as category
                     FROM tools t
                     LEFT JOIN categories c ON t.category_id = c.id
-                    WHERE (t.name LIKE :keyword OR t.description LIKE :keyword)
-                    AND c.name LIKE :category
+                    WHERE t.is_active = 1
+                        AND (t.name {like_op} :keyword OR t.description {like_op} :keyword)
+                        AND c.name {like_op} :category
                     LIMIT 20
                 """)
                 params = {"keyword": f"%{keyword}%", "category": f"%{category}%"}
             else:
-                query = text("""
+                query = text(f"""
                     SELECT t.id, t.name, t.description, t.icon_url, c.name as category
                     FROM tools t
                     LEFT JOIN categories c ON t.category_id = c.id
-                    WHERE t.name LIKE :keyword OR t.description LIKE :keyword
+                    WHERE t.is_active = 1
+                        AND (t.name {like_op} :keyword OR t.description {like_op} :keyword)
                     LIMIT 20
                 """)
                 params = {"keyword": f"%{keyword}%"}
@@ -843,16 +862,19 @@ class StatsBridge:
             )
             rows = result.fetchall()
 
+            from app.config import settings
+            like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+
             keywords = []
             for row in rows:
                 keyword = row[0]
                 count = row[1]
 
-                # 检查是否有匹配的工具
-                check_query = text("""
+                # 检查是否有匹配的工具（大小写不敏感）
+                check_query = text(f"""
                     SELECT COUNT(*) FROM tools
                     WHERE is_active = 1
-                        AND (name LIKE :kw OR description LIKE :kw)
+                        AND (name {like_op} :kw OR description {like_op} :kw)
                 """)
                 check_result = await session.execute(
                     check_query, {"kw": f"%{keyword}%"}
@@ -878,8 +900,11 @@ class StatsBridge:
         根据场景推荐工具
         """
         async with async_session() as session:
-            # 先从分类名称匹配
-            category_query = text("""
+            from app.config import settings
+            like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+
+            # 先从分类名称匹配（大小写不敏感）
+            category_query = text(f"""
                 SELECT
                     t.id,
                     t.name,
@@ -891,9 +916,9 @@ class StatsBridge:
                 JOIN categories c ON t.category_id = c.id
                 LEFT JOIN click_logs cl ON t.id = cl.tool_id
                 WHERE t.is_active = 1
-                    AND (c.name LIKE :scenario
-                         OR t.name LIKE :scenario
-                         OR t.description LIKE :scenario)
+                    AND (c.name {like_op} :scenario
+                         OR t.name {like_op} :scenario
+                         OR t.description {like_op} :scenario)
                 GROUP BY t.id, t.name, t.description, t.icon_url, c.name
                 ORDER BY click_count DESC
                 LIMIT :limit
