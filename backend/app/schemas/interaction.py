@@ -38,3 +38,19 @@ class FavoriteListResponse(BaseModel):
     """收藏列表响应"""
     total: int
     items: list[FavoriteToolResponse]
+
+
+class SearchHistoryItem(BaseModel):
+    """搜索历史项"""
+    id: int
+    keyword: str
+    searched_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SearchHistoryResponse(BaseModel):
+    """搜索历史响应"""
+    total: int
+    items: list[SearchHistoryItem]

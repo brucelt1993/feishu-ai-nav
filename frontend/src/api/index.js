@@ -1,10 +1,24 @@
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { useAdminStore } from '@/stores/admin'
 
+// 错误消息映射
+const ERROR_MESSAGES = {
+  400: '请求参数错误',
+  401: '登录已过期，请重新登录',
+  403: '没有访问权限',
+  404: '请求的资源不存在',
+  500: '服务器错误，请稍后重试',
+  502: '网关错误',
+  503: '服务暂时不可用',
+  timeout: '请求超时，请检查网络连接',
+  network: '网络连接失败，请检查网络'
+}
+
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 15000
 })
 
 // 请求拦截器
@@ -34,7 +48,42 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    console.error('API Error:', error.response?.data || error.message)
+    // 构建错误消息
+    let message = '请求失败'
+
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      message = ERROR_MESSAGES.timeout
+    } else if (!error.response) {
+      message = ERROR_MESSAGES.network
+    } else {
+      const status = error.response.status
+      const serverMessage = error.response.data?.detail || error.response.data?.message
+      message = serverMessage || ERROR_MESSAGES[status] || `请求失败 (${status})`
+
+      // 401处理：清除登录状态
+      if (status === 401) {
+        const isAdminApi = error.config?.url?.startsWith('/admin')
+        if (isAdminApi) {
+          const adminStore = useAdminStore()
+          adminStore.logout()
+        } else {
+          const userStore = useUserStore()
+          userStore.logout()
+        }
+      }
+    }
+
+    // 只对非静默请求显示错误提示
+    if (!error.config?.silent) {
+      ElMessage.error(message)
+    }
+
+    console.error('API Error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.response?.data || error.message
+    })
+
     return Promise.reject(error)
   }
 )
@@ -54,6 +103,7 @@ export const toolsApi = {
   getList: (params = {}) => api.get('/tools', { params }),
   search: (q, limit = 20) => api.get('/tools/search', { params: { q, limit } }),
   recordClick: (toolId) => api.post(`/tools/${toolId}/click`),
+  getTags: () => api.get('/tools/tags'),
   // 交互
   getStats: (toolId) => api.get(`/tools/${toolId}/stats`),
   like: (toolId) => api.post(`/tools/${toolId}/like`),
@@ -66,6 +116,11 @@ export const toolsApi = {
 export const userApi = {
   getFavorites: () => api.get('/user/favorites'),
   getFeedback: () => api.get('/user/feedback'),
+  // 搜索历史
+  getSearchHistory: (limit = 20) => api.get('/user/search-history', { params: { limit } }),
+  addSearchHistory: (keyword) => api.post('/user/search-history', null, { params: { keyword } }),
+  deleteSearchHistory: (id) => api.delete(`/user/search-history/${id}`),
+  clearSearchHistory: () => api.delete('/user/search-history'),
 }
 
 // ============ 反馈API ============
@@ -110,9 +165,46 @@ export const adminApi = {
 
   // 统计
   getOverview: () => api.get('/admin/stats/overview'),
+  getExtendedOverview: () => api.get('/admin/stats/overview-extended'),
   getToolStats: (days = 7, limit = 10) => api.get('/admin/stats/tools', { params: { days, limit } }),
   getUserStats: (days = 7, limit = 20) => api.get('/admin/stats/users', { params: { days, limit } }),
   getTrend: (days = 30) => api.get('/admin/stats/trend', { params: { days } }),
+  getCategoryDistribution: () => api.get('/admin/stats/category-distribution'),
+  getToolDetailStats: (toolId, days = 30) => api.get(`/admin/stats/tool/${toolId}`, { params: { days } }),
+  getToolInteractions: (limit = 20) => api.get('/admin/stats/tool-interactions', { params: { limit } }),
+  getProviderStats: (limit = 20) => api.get('/admin/stats/providers', { params: { limit } }),
+  getWantList: (limit = 50) => api.get('/admin/stats/want-list', { params: { limit } }),
+
+  // 数据导出
+  exportToolsStats: (days = 30, startDate, endDate) => api.get('/admin/export/tools', {
+    params: { days, start_date: startDate, end_date: endDate },
+    responseType: 'blob'
+  }),
+  exportUsersStats: (days = 30, startDate, endDate) => api.get('/admin/export/users', {
+    params: { days, start_date: startDate, end_date: endDate },
+    responseType: 'blob'
+  }),
+  exportTrendStats: (days = 30) => api.get('/admin/export/trend', {
+    params: { days },
+    responseType: 'blob'
+  }),
+  exportInteractionsStats: () => api.get('/admin/export/interactions', {
+    responseType: 'blob'
+  }),
+  exportProvidersStats: () => api.get('/admin/export/providers', {
+    responseType: 'blob'
+  }),
+  exportWantsStats: () => api.get('/admin/export/wants', {
+    responseType: 'blob'
+  }),
+
+  // 标签管理
+  getTags: () => api.get('/admin/tags'),
+  createTag: (data) => api.post('/admin/tags', data),
+  updateTag: (id, data) => api.put(`/admin/tags/${id}`, data),
+  deleteTag: (id) => api.delete(`/admin/tags/${id}`),
+  getToolTags: (toolId) => api.get(`/admin/tools/${toolId}/tags`),
+  setToolTags: (toolId, tagIds) => api.put(`/admin/tools/${toolId}/tags`, tagIds),
 
   // 导入导出
   importTools: (file, updateExisting = true) => {
@@ -123,6 +215,18 @@ export const adminApi = {
     })
   },
   downloadTemplate: () => api.get('/admin/tools/import/template', { responseType: 'blob' }),
+
+  // 报表推送
+  getReportPushSettings: () => api.get('/admin/report-push/settings'),
+  saveReportPushSettings: (data) => api.put('/admin/report-push/settings', data),
+  getReportRecipients: () => api.get('/admin/report-push/recipients'),
+  addReportRecipient: (data) => api.post('/admin/report-push/recipients', data),
+  updateReportRecipient: (id, data) => api.put(`/admin/report-push/recipients/${id}`, data),
+  deleteReportRecipient: (id) => api.delete(`/admin/report-push/recipients/${id}`),
+  getBotChats: () => api.get('/admin/report-push/chats'),
+  getReportPushHistory: (page = 1, size = 10) => api.get('/admin/report-push/history', { params: { page, size } }),
+  pushReport: (data) => api.post('/admin/report-push/push', data),
+  previewReport: (data) => api.post('/admin/report-push/preview', data),
 }
 
 export default api

@@ -156,39 +156,47 @@ async function handleRemoveFavorite(item) {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f5f6f7;
+  background: var(--bg-primary);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 16px 24px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .header-left .el-button {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+.header-left .el-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateX(-2px);
 }
 
 .title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   margin: 0;
+  letter-spacing: -0.5px;
 }
 
 .content {
   flex: 1;
-  padding: 20px;
+  padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
@@ -196,25 +204,36 @@ async function handleRemoveFavorite(item) {
 }
 
 .content-loading {
-  background: #fff;
-  padding: 20px;
-  border-radius: 8px;
+  background: var(--bg-secondary);
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
 }
 
 .not-logged-in,
 .empty {
-  background: #fff;
-  border-radius: 8px;
-  padding: 60px;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 80px 40px;
+  box-shadow: var(--shadow-md);
+  text-align: center;
 }
 
 .favorites-header {
-  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--bg-tertiary);
 }
 
 .count {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 6px 14px;
+  border-radius: 20px;
 }
 
 .tool-grid {
@@ -227,46 +246,73 @@ async function handleRemoveFavorite(item) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #ebeef5;
-  transition: all 0.3s ease;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.favorite-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent-gradient);
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
 .favorite-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.2);
+}
+
+.favorite-card:hover::before {
+  opacity: 1;
 }
 
 .card-main {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   flex: 1;
   cursor: pointer;
 }
 
 .tool-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s;
+}
+
+.favorite-card:hover .tool-icon {
+  transform: scale(1.05);
 }
 
 .tool-icon img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .icon-placeholder {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .tool-info {
@@ -275,19 +321,20 @@ async function handleRemoveFavorite(item) {
 }
 
 .tool-name {
-  font-size: 16px;
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
 }
 
 .tool-desc {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  line-height: 1.5;
 }
 
 .tool-meta {
@@ -298,25 +345,58 @@ async function handleRemoveFavorite(item) {
 
 .favorited-time {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-muted);
 }
 
 .card-actions {
   flex-shrink: 0;
-  margin-left: 16px;
+  margin-left: 20px;
+}
+
+.card-actions .el-button {
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 500;
+  transition: all 0.25s;
+}
+
+.card-actions .el-button:hover {
+  transform: translateY(-1px);
 }
 
 @media (max-width: 768px) {
+  .header {
+    padding: 12px 16px;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
   .favorite-card {
     flex-direction: column;
     align-items: stretch;
+    padding: 16px;
+  }
+
+  .card-main {
+    gap: 16px;
+  }
+
+  .tool-icon {
+    width: 48px;
+    height: 48px;
   }
 
   .card-actions {
     margin-left: 0;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #f0f0f0;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: flex-end;
   }

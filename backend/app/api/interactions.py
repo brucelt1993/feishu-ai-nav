@@ -6,10 +6,11 @@ from typing import Optional
 import logging
 
 from ..database import get_db
-from ..models import Tool, User, UserFavorite, UserLike, Category
+from ..models import Tool, User, UserFavorite, UserLike, Category, SearchHistory
 from ..schemas import (
     InteractionResponse, ToolInteractionStats,
-    FavoriteToolResponse, FavoriteListResponse
+    FavoriteToolResponse, FavoriteListResponse,
+    SearchHistoryItem, SearchHistoryResponse
 )
 from .auth import verify_token
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
-    authorization: str = Header(...),
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """获取当前登录用户（必须登录）"""
@@ -247,3 +248,103 @@ async def get_tool_stats(
         is_liked=is_liked,
         is_favorited=is_favorited,
     )
+
+
+# ========== 搜索历史 ==========
+
+@router.get("/user/search-history", response_model=SearchHistoryResponse)
+async def get_search_history(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """获取用户搜索历史（最近N条，去重）"""
+    # 使用子查询获取每个关键词的最新记录
+    subquery = (
+        select(
+            SearchHistory.keyword,
+            func.max(SearchHistory.searched_at).label("latest")
+        )
+        .where(SearchHistory.user_id == user.id)
+        .group_by(SearchHistory.keyword)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(SearchHistory)
+        .join(
+            subquery,
+            (SearchHistory.keyword == subquery.c.keyword) &
+            (SearchHistory.searched_at == subquery.c.latest)
+        )
+        .where(SearchHistory.user_id == user.id)
+        .order_by(SearchHistory.searched_at.desc())
+        .limit(limit)
+    )
+    histories = result.scalars().all()
+
+    items = [
+        SearchHistoryItem(
+            id=h.id,
+            keyword=h.keyword,
+            searched_at=h.searched_at
+        )
+        for h in histories
+    ]
+
+    return SearchHistoryResponse(total=len(items), items=items)
+
+
+@router.post("/user/search-history", response_model=InteractionResponse)
+async def add_search_history(
+    keyword: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """记录搜索历史"""
+    if not keyword or len(keyword.strip()) == 0:
+        return InteractionResponse(success=False, message="关键词不能为空")
+
+    keyword = keyword.strip()[:100]  # 限制长度
+
+    history = SearchHistory(user_id=user.id, keyword=keyword)
+    db.add(history)
+    await db.commit()
+
+    logger.info(f"用户 {user.name} 搜索了: {keyword}")
+    return InteractionResponse(success=True, message="已记录")
+
+
+@router.delete("/user/search-history/{history_id}", response_model=InteractionResponse)
+async def delete_search_history(
+    history_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """删除单条搜索历史"""
+    result = await db.execute(
+        delete(SearchHistory).where(
+            SearchHistory.id == history_id,
+            SearchHistory.user_id == user.id
+        )
+    )
+    await db.commit()
+
+    if result.rowcount > 0:
+        return InteractionResponse(success=True, message="已删除")
+    return InteractionResponse(success=False, message="记录不存在")
+
+
+@router.delete("/user/search-history", response_model=InteractionResponse)
+async def clear_search_history(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """清空搜索历史"""
+    result = await db.execute(
+        delete(SearchHistory).where(SearchHistory.user_id == user.id)
+    )
+    await db.commit()
+
+    logger.info(f"用户 {user.name} 清空了搜索历史，删除 {result.rowcount} 条")
+    return InteractionResponse(success=True, message=f"已清空 {result.rowcount} 条记录")

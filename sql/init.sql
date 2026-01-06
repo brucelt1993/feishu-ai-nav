@@ -168,3 +168,90 @@ INSERT INTO tools (name, description, target_url, category_id, sort_order) VALUE
 ('Midjourney', 'AI图像生成', 'https://midjourney.com', 6, 1),
 ('Notion AI', '智能笔记助手', 'https://notion.so', 7, 1)
 ON CONFLICT DO NOTHING;
+
+-- 搜索历史表
+CREATE TABLE IF NOT EXISTS search_history (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    keyword VARCHAR(100) NOT NULL,
+    searched_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_history_user ON search_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_search_history_time ON search_history(searched_at);
+
+-- 标签表
+CREATE TABLE IF NOT EXISTS tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    color VARCHAR(20) DEFAULT '#667eea',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 工具标签关联表
+CREATE TABLE IF NOT EXISTS tool_tags (
+    tool_id INT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+    tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (tool_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_tags_tool ON tool_tags(tool_id);
+CREATE INDEX IF NOT EXISTS idx_tool_tags_tag ON tool_tags(tag_id);
+
+-- 插入示例标签
+INSERT INTO tags (name, color) VALUES
+('免费', '#67c23a'),
+('付费', '#e6a23c'),
+('国产', '#f56c6c'),
+('热门', '#409eff'),
+('新上线', '#909399')
+ON CONFLICT (name) DO NOTHING;
+
+-- 报表推送设置表
+CREATE TABLE IF NOT EXISTS report_push_settings (
+    id SERIAL PRIMARY KEY,
+    enabled BOOLEAN DEFAULT false,
+    push_time VARCHAR(10),
+    report_types VARCHAR(100) DEFAULT 'overview,tools',
+    days INT DEFAULT 7,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 已有数据库升级：添加新字段（如果不存在）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'report_push_settings' AND column_name = 'report_types') THEN
+        ALTER TABLE report_push_settings ADD COLUMN report_types VARCHAR(100) DEFAULT 'overview,tools';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'report_push_settings' AND column_name = 'days') THEN
+        ALTER TABLE report_push_settings ADD COLUMN days INT DEFAULT 7;
+    END IF;
+END $$;
+
+-- 报表推送接收人表
+CREATE TABLE IF NOT EXISTS report_recipients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipients_email ON report_recipients(email);
+CREATE INDEX IF NOT EXISTS idx_recipients_active ON report_recipients(is_active);
+
+-- 报表推送历史表
+CREATE TABLE IF NOT EXISTS report_push_history (
+    id SERIAL PRIMARY KEY,
+    report_type VARCHAR(50) NOT NULL,
+    push_method VARCHAR(20) NOT NULL,
+    recipient_count INT DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending',
+    error_msg TEXT,
+    pushed_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_history_status ON report_push_history(status);
+CREATE INDEX IF NOT EXISTS idx_push_history_time ON report_push_history(pushed_at);

@@ -156,15 +156,19 @@ class FeishuService:
 
             return data["data"]
 
-    async def send_card_message(self, chat_id: str, card: dict):
-        """发送卡片消息到群"""
+    async def send_card_message(self, receive_id: str, card: dict, receive_id_type: str = "chat_id"):
+        """发送卡片消息"""
+        import json
         token = await self.get_tenant_access_token()
-        url = f"{self.BASE_URL}/im/v1/messages?receive_id_type=chat_id"
+        url = f"{self.BASE_URL}/im/v1/messages?receive_id_type={receive_id_type}"
+
+        # 确保 card 是 JSON 字符串格式
+        content = json.dumps(card) if isinstance(card, dict) else card
 
         payload = {
-            "receive_id": chat_id,
+            "receive_id": receive_id,
             "msg_type": "interactive",
-            "content": str(card) if isinstance(card, dict) else card,
+            "content": content,
         }
 
         async with httpx.AsyncClient() as client:
@@ -182,8 +186,159 @@ class FeishuService:
                 logger.error(f"发送消息失败: {data}")
                 raise Exception(f"发送消息失败: {data.get('msg')}")
 
-            logger.info(f"消息发送成功: {chat_id}")
+            logger.info(f"消息发送成功: {receive_id}")
             return data
+
+    async def get_bot_joined_chats(self) -> list:
+        """获取机器人已加入的群聊列表"""
+        token = await self.get_tenant_access_token()
+        url = f"{self.BASE_URL}/im/v1/chats"
+
+        all_chats = []
+        page_token = None
+
+        async with httpx.AsyncClient() as client:
+            while True:
+                params = {"page_size": 100}
+                if page_token:
+                    params["page_token"] = page_token
+
+                response = await client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    params=params,
+                )
+                data = response.json()
+
+                if data.get("code") != 0:
+                    logger.error(f"获取群聊列表失败: {data}")
+                    raise Exception(f"获取群聊列表失败: {data.get('msg')}")
+
+                items = data.get("data", {}).get("items", [])
+                for chat in items:
+                    all_chats.append({
+                        "chat_id": chat.get("chat_id"),
+                        "name": chat.get("name"),
+                        "avatar": chat.get("avatar"),
+                        "owner_id": chat.get("owner_id"),
+                        "chat_mode": chat.get("chat_mode"),  # group/p2p
+                        "chat_type": chat.get("chat_type"),  # private/public
+                    })
+
+                # 检查是否有更多页
+                page_token = data.get("data", {}).get("page_token")
+                if not page_token or not data.get("data", {}).get("has_more"):
+                    break
+
+        logger.info(f"获取到 {len(all_chats)} 个群聊")
+        return all_chats
+
+    async def get_user_by_email(self, email: str) -> Optional[dict]:
+        """通过邮箱获取用户信息"""
+        token = await self.get_tenant_access_token()
+        url = f"{self.BASE_URL}/contact/v3/users/batch_get_id"
+
+        payload = {
+            "emails": [email],
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                params={"user_id_type": "open_id"},
+            )
+            data = response.json()
+
+            if data.get("code") != 0:
+                logger.error(f"通过邮箱获取用户失败: {data}")
+                return None
+
+            user_list = data.get("data", {}).get("user_list", [])
+            if user_list and user_list[0].get("user_id"):
+                return {"open_id": user_list[0]["user_id"]}
+
+            return None
+
+    async def send_email_with_attachment(
+        self,
+        to_email: str,
+        subject: str,
+        content: str,
+        attachment_name: str,
+        attachment_content: bytes
+    ):
+        """发送带附件的邮件（通过飞书机器人发送文件消息）"""
+        import base64
+
+        # 先获取用户的 open_id
+        user_info = await self.get_user_by_email(to_email)
+        if not user_info or not user_info.get("open_id"):
+            raise Exception(f"未找到邮箱对应的飞书用户: {to_email}")
+
+        open_id = user_info["open_id"]
+
+        # 先上传文件
+        token = await self.get_tenant_access_token()
+
+        # 使用飞书文件上传API
+        upload_url = f"{self.BASE_URL}/im/v1/files"
+
+        # 创建表单数据
+        import io
+        files = {
+            "file": (attachment_name, io.BytesIO(attachment_content), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        }
+        form_data = {
+            "file_type": "stream",
+            "file_name": attachment_name,
+        }
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                upload_url,
+                headers={"Authorization": f"Bearer {token}"},
+                files=files,
+                data=form_data,
+            )
+            upload_data = response.json()
+
+            if upload_data.get("code") != 0:
+                logger.error(f"上传文件失败: {upload_data}")
+                raise Exception(f"上传文件失败: {upload_data.get('msg')}")
+
+            file_key = upload_data["data"]["file_key"]
+
+        # 发送文件消息
+        import json
+        msg_url = f"{self.BASE_URL}/im/v1/messages?receive_id_type=open_id"
+        msg_payload = {
+            "receive_id": open_id,
+            "msg_type": "file",
+            "content": json.dumps({"file_key": file_key}),
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                msg_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=msg_payload,
+            )
+            msg_data = response.json()
+
+            if msg_data.get("code") != 0:
+                logger.error(f"发送文件消息失败: {msg_data}")
+                raise Exception(f"发送文件消息失败: {msg_data.get('msg')}")
+
+            logger.info(f"文件消息发送成功: {to_email}")
+            return msg_data
 
 
 # 单例

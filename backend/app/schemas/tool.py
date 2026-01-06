@@ -1,7 +1,7 @@
 """工具相关Schema"""
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class ToolBase(BaseModel):
@@ -43,12 +43,23 @@ class CategoryBrief(BaseModel):
         from_attributes = True
 
 
+class TagBrief(BaseModel):
+    """标签简要信息"""
+    id: int
+    name: str
+    color: str
+
+    class Config:
+        from_attributes = True
+
+
 class ToolResponse(ToolBase):
     """工具响应"""
     id: int
     created_at: datetime
     updated_at: datetime
     category: Optional[CategoryBrief] = None
+    tags: List[TagBrief] = []
 
     class Config:
         from_attributes = True

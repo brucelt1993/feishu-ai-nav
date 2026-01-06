@@ -33,6 +33,7 @@ class ToolBrief(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     target_url: str
+    provider: Optional[str] = None
     sort_order: int = 0
 
     class Config:

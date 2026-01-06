@@ -48,13 +48,25 @@ const routes = [
         path: 'stats',
         name: 'Stats',
         component: () => import('@/views/admin/Stats.vue'),
-        meta: { title: '统计分析' }
+        meta: { title: '数据报表' }
       },
       {
         path: 'feedback',
         name: 'AdminFeedback',
         component: () => import('@/views/admin/Feedback.vue'),
         meta: { title: '反馈管理' }
+      },
+      {
+        path: 'tags',
+        name: 'AdminTags',
+        component: () => import('@/views/admin/Tags.vue'),
+        meta: { title: '标签管理' }
+      },
+      {
+        path: 'report-push',
+        name: 'ReportPush',
+        component: () => import('@/views/admin/ReportPush.vue'),
+        meta: { title: '报表推送' }
       }
     ]
   }

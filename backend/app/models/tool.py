@@ -30,3 +30,4 @@ class Tool(Base):
 
     # 关系
     category = relationship("Category", back_populates="tools")
+    tags = relationship("Tag", secondary="tool_tags", back_populates="tools")

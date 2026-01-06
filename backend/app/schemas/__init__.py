@@ -7,12 +7,16 @@ from .category import (
 )
 from .interaction import (
     InteractionResponse, ToolInteractionStats,
-    FavoriteToolResponse, FavoriteListResponse
+    FavoriteToolResponse, FavoriteListResponse,
+    SearchHistoryItem, SearchHistoryResponse
 )
 from .feedback import (
     FeedbackType, FeedbackStatus,
     FeedbackCreate, FeedbackResponse, FeedbackListResponse,
     FeedbackUpdate, UserFeedbackResponse, UserFeedbackListResponse
+)
+from .tag import (
+    TagCreate, TagUpdate, TagResponse, TagListResponse, TagSimple
 )
 
 __all__ = [
@@ -23,7 +27,9 @@ __all__ = [
     "CategoryWithChildren", "CategoryTree",
     "InteractionResponse", "ToolInteractionStats",
     "FavoriteToolResponse", "FavoriteListResponse",
+    "SearchHistoryItem", "SearchHistoryResponse",
     "FeedbackType", "FeedbackStatus",
     "FeedbackCreate", "FeedbackResponse", "FeedbackListResponse",
     "FeedbackUpdate", "UserFeedbackResponse", "UserFeedbackListResponse",
+    "TagCreate", "TagUpdate", "TagResponse", "TagListResponse", "TagSimple",
 ]

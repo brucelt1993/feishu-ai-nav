@@ -1,4 +1,5 @@
 """管理后台API"""
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from ..schemas import (
 )
 from ..services.stats_service import StatsService
 from ..services.import_service import import_tools, generate_template
+from ..services.export_service import ExportService
 from ..config import get_settings
 from .auth import verify_token
 
@@ -159,7 +161,7 @@ async def list_tools(
 ):
     """获取工具列表（分页）"""
     # 构建查询
-    base_query = select(Tool).options(selectinload(Tool.category))
+    base_query = select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags))
     count_query = select(func.count(Tool.id))
 
     if category_id is not None:
@@ -200,7 +202,12 @@ async def create_tool(
     )
     db.add(tool)
     await db.commit()
-    await db.refresh(tool, ["category"])
+
+    # 重新查询以获取完整对象（避免延迟加载问题）
+    result = await db.execute(
+        select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags)).where(Tool.id == tool.id)
+    )
+    tool = result.scalar_one()
 
     logger.info(f"创建工具: {tool.name} by {admin_id}")
     return ToolResponse.model_validate(tool)
@@ -215,7 +222,7 @@ async def update_tool(
 ):
     """更新工具"""
     result = await db.execute(
-        select(Tool).options(selectinload(Tool.category)).where(Tool.id == tool_id)
+        select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags)).where(Tool.id == tool_id)
     )
     tool = result.scalar_one_or_none()
 
@@ -234,7 +241,12 @@ async def update_tool(
         setattr(tool, key, value)
 
     await db.commit()
-    await db.refresh(tool, ["category"])
+
+    # 重新查询以获取完整对象（避免延迟加载问题）
+    result = await db.execute(
+        select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags)).where(Tool.id == tool_id)
+    )
+    tool = result.scalar_one()
 
     logger.info(f"更新工具: {tool.name}")
     return ToolResponse.model_validate(tool)
@@ -315,6 +327,16 @@ async def get_stats_overview(
     return await service.get_overview()
 
 
+@router.get("/stats/overview-extended")
+async def get_extended_overview(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取扩展的统计概览（含互动数据和环比）"""
+    service = StatsService(db)
+    return await service.get_extended_overview()
+
+
 @router.get("/stats/tools")
 async def get_tool_stats(
     days: int = 7,
@@ -348,6 +370,168 @@ async def get_trend(
     """获取使用趋势"""
     service = StatsService(db)
     return await service.get_trend(days=days)
+
+
+@router.get("/stats/category-distribution")
+async def get_category_distribution(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取分类使用分布"""
+    service = StatsService(db)
+    return await service.get_category_distribution()
+
+
+@router.get("/stats/tool/{tool_id}")
+async def get_tool_detail_stats(
+    tool_id: int,
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取单个工具的详细统计"""
+    service = StatsService(db)
+    return await service.get_tool_detail_stats(tool_id=tool_id, days=days)
+
+
+@router.get("/stats/tool-interactions")
+async def get_tool_interactions(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取工具点赞收藏统计"""
+    service = StatsService(db)
+    return await service.get_tool_interactions(limit=limit)
+
+
+@router.get("/stats/providers")
+async def get_provider_stats(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取提供者统计（工具数和点击数）"""
+    service = StatsService(db)
+    return await service.get_provider_stats(limit=limit)
+
+
+@router.get("/stats/want-list")
+async def get_want_list(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """获取用户想要的工具列表"""
+    service = StatsService(db)
+    return await service.get_want_list(limit=limit)
+
+
+# ============ 数据导出 ============
+
+@router.get("/export/tools")
+async def export_tools_stats(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出工具统计报表"""
+    service = ExportService(db)
+    content = await service.export_tools_stats(days=days)
+
+    filename = f"tools_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/users")
+async def export_users_stats(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出用户统计报表"""
+    service = ExportService(db)
+    content = await service.export_users_stats(days=days)
+
+    filename = f"users_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/trend")
+async def export_trend_stats(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出趋势统计报表"""
+    service = ExportService(db)
+    content = await service.export_trend_stats(days=days)
+
+    filename = f"trend_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/interactions")
+async def export_interactions_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出工具互动统计报表"""
+    service = ExportService(db)
+    content = await service.export_interactions_stats()
+
+    filename = f"interactions_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/providers")
+async def export_providers_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出提供者统计报表"""
+    service = ExportService(db)
+    content = await service.export_providers_stats()
+
+    filename = f"providers_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export/wants")
+async def export_wants_stats(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    """导出用户想要统计报表"""
+    service = ExportService(db)
+    content = await service.export_wants_stats()
+
+    filename = f"wants_stats_{date.today().isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ============ 导入导出 ============
