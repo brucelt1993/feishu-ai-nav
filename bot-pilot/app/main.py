@@ -2,6 +2,8 @@
 Bot-Pilot 飞书机器人服务入口
 """
 
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +12,37 @@ from loguru import logger
 from app.api import callback, health
 from app.config import settings
 from app.services.database import init_db
+
+
+def setup_logging():
+    """配置日志：控制台 + 文件（按天轮转）"""
+    # 创建日志目录
+    log_dir = "/app/logs" if os.path.exists("/app") else "./logs"
+    os.makedirs(log_dir, exist_ok=True)
+
+    # 移除默认 handler
+    logger.remove()
+
+    # 控制台输出
+    logger.add(
+        sys.stderr,
+        level="DEBUG" if settings.debug else "INFO",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    )
+
+    # 文件输出（按天轮转，保留30天）
+    logger.add(
+        os.path.join(log_dir, "bot-pilot.log"),
+        rotation="00:00",  # 每天午夜轮转
+        retention="30 days",  # 保留30天
+        encoding="utf-8",
+        level="DEBUG" if settings.debug else "INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    )
+
+
+# 初始化日志配置
+setup_logging()
 
 
 @asynccontextmanager

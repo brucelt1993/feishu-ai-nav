@@ -1,22 +1,53 @@
 """FastAPI应用入口"""
+import os
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 
 from .api import api_router
 from .config import get_settings
 from .database import init_db
 from .tasks.scheduler import init_scheduler, shutdown_scheduler
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
 settings = get_settings()
-logger = logging.getLogger(__name__)
+
+# 配置日志
+def setup_logging():
+    """配置日志：控制台 + 文件（按天轮转）"""
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_level = logging.DEBUG if settings.debug else logging.INFO
+
+    # 创建日志目录
+    log_dir = "/app/logs" if os.path.exists("/app") else "./logs"
+    os.makedirs(log_dir, exist_ok=True)
+
+    # 根日志配置
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # 控制台输出
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(console_handler)
+
+    # 文件输出（按天轮转，保留30天）
+    file_handler = TimedRotatingFileHandler(
+        filename=os.path.join(log_dir, "backend.log"),
+        when="midnight",
+        interval=1,
+        backupCount=30,
+        encoding="utf-8",
+    )
+    file_handler.suffix = "%Y-%m-%d"
+    file_handler.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(file_handler)
+
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 
 @asynccontextmanager
