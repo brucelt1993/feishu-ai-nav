@@ -74,6 +74,8 @@ class ChatService:
 
         except Exception as e:
             logger.error(f"❌ OpenAI API 调用失败: {e}")
+            import traceback
+            logger.error(f"堆栈: {traceback.format_exc()}")
             raise
 
     async def _call_openai(self, messages: list[dict]) -> str:
@@ -91,6 +93,12 @@ class ChatService:
             max_tokens=settings.openai_max_tokens,
             temperature=settings.openai_temperature,
         )
+
+        logger.debug(f"📥 OpenAI 响应 choices 数: {len(response.choices) if response.choices else 0}")
+
+        if not response.choices:
+            logger.error(f"❌ OpenAI 返回空 choices: {response}")
+            return "抱歉，AI 服务暂时无法响应，请稍后再试。"
 
         assistant_message = response.choices[0].message
 
@@ -112,6 +120,10 @@ class ChatService:
                 max_tokens=settings.openai_max_tokens,
                 temperature=settings.openai_temperature,
             )
+
+            if not second_response.choices:
+                logger.error(f"❌ OpenAI 第二次调用返回空 choices: {second_response}")
+                return "抱歉，AI 服务暂时无法响应，请稍后再试。"
 
             return second_response.choices[0].message.content or ""
 
