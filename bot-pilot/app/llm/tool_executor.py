@@ -17,6 +17,7 @@ class ToolExecutor:
         self.stats = StatsBridge()
         # 工具映射
         self._handlers = {
+            # 原有工具
             "get_overview": self._get_overview,
             "get_tool_ranking": self._get_tool_ranking,
             "get_user_ranking": self._get_user_ranking,
@@ -27,6 +28,13 @@ class ToolExecutor:
             "get_category_stats": self._get_category_stats,
             "get_retention_stats": self._get_retention_stats,
             "get_hourly_distribution": self._get_hourly_distribution,
+            # 新增工具
+            "get_provider_stats": self._get_provider_stats,
+            "get_tool_interactions": self._get_tool_interactions,
+            "get_hot_tools": self._get_hot_tools,
+            "get_want_list": self._get_want_list,
+            "get_search_keywords": self._get_search_keywords,
+            "recommend_by_scenario": self._recommend_by_scenario,
         }
 
     async def execute(self, function_name: str, arguments: dict[str, Any]) -> Any:
@@ -92,3 +100,29 @@ class ToolExecutor:
     async def _get_hourly_distribution(self, days: int = 7) -> dict:
         """获取时段分布"""
         return await self.stats.get_hourly_distribution(days=days)
+
+    # ========== 新增工具 ==========
+
+    async def _get_provider_stats(self, days: int = 7, limit: int = 10) -> dict:
+        """获取提供者统计"""
+        return await self.stats.get_provider_stats(days=days, limit=limit)
+
+    async def _get_tool_interactions(self, limit: int = 10) -> dict:
+        """获取工具互动排行"""
+        return await self.stats.get_tool_interactions(limit=limit)
+
+    async def _get_hot_tools(self, days: int = 7, limit: int = 10) -> dict:
+        """获取热门新工具"""
+        return await self.stats.get_hot_tools(days=days, limit=limit)
+
+    async def _get_want_list(self, days: int = 30, limit: int = 20) -> dict:
+        """获取用户想要的工具"""
+        return await self.stats.get_want_list(days=days, limit=limit)
+
+    async def _get_search_keywords(self, days: int = 7, limit: int = 20) -> dict:
+        """获取搜索热词"""
+        return await self.stats.get_search_keywords(days=days, limit=limit)
+
+    async def _recommend_by_scenario(self, scenario: str, limit: int = 5) -> dict:
+        """根据场景推荐工具"""
+        return await self.stats.recommend_by_scenario(scenario=scenario, limit=limit)

@@ -199,6 +199,139 @@ MCP_TOOLS = [
             },
         },
     },
+    # ========== 新增工具 ==========
+    {
+        "type": "function",
+        "function": {
+            "name": "get_provider_stats",
+            "description": "获取工具提供者/推荐者统计，看谁推荐的工具最多、最受欢迎",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer",
+                        "description": "统计天数，默认7天",
+                        "default": 7,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认10",
+                        "default": 10,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tool_interactions",
+            "description": "获取工具互动排行，按收藏数+点赞数排序，了解最受喜爱的工具",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认10",
+                        "default": 10,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hot_tools",
+            "description": "获取热门新工具，查看最近新上架且点击量高的工具",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer",
+                        "description": "查看最近N天新增的工具，默认7天",
+                        "default": 7,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认10",
+                        "default": 10,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_want_list",
+            "description": "获取用户想要的工具列表，了解用户的工具需求和诉求",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer",
+                        "description": "统计天数，默认30天",
+                        "default": 30,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认20",
+                        "default": 20,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_search_keywords",
+            "description": "获取搜索热词统计，了解用户都在搜什么，哪些搜索有结果哪些没有",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer",
+                        "description": "统计天数，默认7天",
+                        "default": 7,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认20",
+                        "default": 20,
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_by_scenario",
+            "description": "根据使用场景推荐工具，如画图、写代码、翻译等",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scenario": {
+                        "type": "string",
+                        "description": "使用场景描述，如：画图、写代码、翻译、聊天",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回数量，默认5",
+                        "default": 5,
+                    },
+                },
+                "required": ["scenario"],
+            },
+        },
+    },
 ]
 
 

@@ -631,3 +631,295 @@ class StatsBridge:
         if previous == 0:
             return 100.0 if current > 0 else 0.0
         return round((current - previous) / previous * 100, 2)
+
+    # ========== 新增工具方法 ==========
+
+    async def get_provider_stats(self, days: int = 7, limit: int = 10) -> dict[str, Any]:
+        """
+        获取提供者统计（谁推荐的工具最多/最受欢迎）
+        """
+        async with async_session() as session:
+            start_date = datetime.now().date() - timedelta(days=days)
+
+            query = text("""
+                SELECT
+                    t.provider,
+                    COUNT(DISTINCT t.id) as tool_count,
+                    COUNT(c.id) as total_clicks,
+                    COUNT(DISTINCT c.user_id) as user_count
+                FROM tools t
+                LEFT JOIN click_logs c ON t.id = c.tool_id
+                    AND DATE(c.clicked_at) >= :start_date
+                WHERE t.provider IS NOT NULL AND t.provider != ''
+                GROUP BY t.provider
+                ORDER BY total_clicks DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(
+                query, {"start_date": start_date, "limit": limit}
+            )
+            rows = result.fetchall()
+
+            providers = [
+                {
+                    "rank": i + 1,
+                    "name": row[0],
+                    "tool_count": row[1],
+                    "total_clicks": row[2],
+                    "user_count": row[3],
+                }
+                for i, row in enumerate(rows)
+            ]
+
+            return {
+                "period": f"近{days}天",
+                "providers": providers,
+                "total": len(providers),
+            }
+
+    async def get_tool_interactions(self, limit: int = 10) -> dict[str, Any]:
+        """
+        获取工具互动排行（收藏+点赞）
+        """
+        async with async_session() as session:
+            query = text("""
+                SELECT
+                    t.id,
+                    t.name,
+                    t.icon_url,
+                    COALESCE(f.fav_count, 0) as favorites,
+                    COALESCE(l.like_count, 0) as likes,
+                    COALESCE(f.fav_count, 0) + COALESCE(l.like_count, 0) as score
+                FROM tools t
+                LEFT JOIN (
+                    SELECT tool_id, COUNT(*) as fav_count
+                    FROM user_favorites
+                    GROUP BY tool_id
+                ) f ON t.id = f.tool_id
+                LEFT JOIN (
+                    SELECT tool_id, COUNT(*) as like_count
+                    FROM user_likes
+                    GROUP BY tool_id
+                ) l ON t.id = l.tool_id
+                WHERE t.is_active = 1
+                ORDER BY score DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(query, {"limit": limit})
+            rows = result.fetchall()
+
+            tools = [
+                {
+                    "rank": i + 1,
+                    "id": row[0],
+                    "name": row[1],
+                    "icon_url": row[2],
+                    "favorites": row[3],
+                    "likes": row[4],
+                    "score": row[5],
+                }
+                for i, row in enumerate(rows)
+            ]
+
+            return {
+                "tools": tools,
+                "total": len(tools),
+            }
+
+    async def get_hot_tools(self, days: int = 7, limit: int = 10) -> dict[str, Any]:
+        """
+        获取热门新工具（最近新增且点击量高）
+        """
+        async with async_session() as session:
+            start_date = datetime.now().date() - timedelta(days=days)
+
+            query = text("""
+                SELECT
+                    t.id,
+                    t.name,
+                    t.description,
+                    t.icon_url,
+                    t.created_at,
+                    COUNT(c.id) as click_count
+                FROM tools t
+                LEFT JOIN click_logs c ON t.id = c.tool_id
+                WHERE t.is_active = 1
+                    AND DATE(t.created_at) >= :start_date
+                GROUP BY t.id, t.name, t.description, t.icon_url, t.created_at
+                ORDER BY click_count DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(
+                query, {"start_date": start_date, "limit": limit}
+            )
+            rows = result.fetchall()
+
+            # 判断是否热门（点击量 > 10 为热门）
+            tools = [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2][:100] if row[2] else None,
+                    "icon_url": row[3],
+                    "created_at": str(row[4])[:10] if row[4] else None,
+                    "click_count": row[5],
+                    "is_hot": row[5] > 10,
+                }
+                for row in rows
+            ]
+
+            return {
+                "period": f"近{days}天新增",
+                "tools": tools,
+                "total": len(tools),
+            }
+
+    async def get_want_list(self, days: int = 30, limit: int = 20) -> dict[str, Any]:
+        """
+        获取用户想要的工具列表
+        """
+        async with async_session() as session:
+            start_date = datetime.now().date() - timedelta(days=days)
+
+            query = text("""
+                SELECT
+                    tool_name,
+                    COUNT(*) as count,
+                    MAX(created_at) as latest_at
+                FROM tool_feedback
+                WHERE feedback_type = 'want'
+                    AND DATE(created_at) >= :start_date
+                    AND tool_name IS NOT NULL AND tool_name != ''
+                GROUP BY tool_name
+                ORDER BY count DESC, latest_at DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(
+                query, {"start_date": start_date, "limit": limit}
+            )
+            rows = result.fetchall()
+
+            wants = [
+                {
+                    "tool_name": row[0],
+                    "count": row[1],
+                    "latest_at": str(row[2])[:10] if row[2] else None,
+                }
+                for row in rows
+            ]
+
+            return {
+                "period": f"近{days}天",
+                "wants": wants,
+                "total": len(wants),
+            }
+
+    async def get_search_keywords(self, days: int = 7, limit: int = 20) -> dict[str, Any]:
+        """
+        获取搜索热词
+        """
+        async with async_session() as session:
+            start_date = datetime.now().date() - timedelta(days=days)
+
+            # 聚合搜索关键词
+            query = text("""
+                SELECT
+                    keyword,
+                    COUNT(*) as count
+                FROM search_history
+                WHERE DATE(searched_at) >= :start_date
+                    AND keyword IS NOT NULL AND keyword != ''
+                GROUP BY keyword
+                ORDER BY count DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(
+                query, {"start_date": start_date, "limit": limit}
+            )
+            rows = result.fetchall()
+
+            keywords = []
+            for row in rows:
+                keyword = row[0]
+                count = row[1]
+
+                # 检查是否有匹配的工具
+                check_query = text("""
+                    SELECT COUNT(*) FROM tools
+                    WHERE is_active = 1
+                        AND (name LIKE :kw OR description LIKE :kw)
+                """)
+                check_result = await session.execute(
+                    check_query, {"kw": f"%{keyword}%"}
+                )
+                has_result = (check_result.scalar() or 0) > 0
+
+                keywords.append({
+                    "keyword": keyword,
+                    "count": count,
+                    "has_result": has_result,
+                })
+
+            return {
+                "period": f"近{days}天",
+                "keywords": keywords,
+                "total": len(keywords),
+            }
+
+    async def recommend_by_scenario(
+        self, scenario: str, limit: int = 5
+    ) -> dict[str, Any]:
+        """
+        根据场景推荐工具
+        """
+        async with async_session() as session:
+            # 先从分类名称匹配
+            category_query = text("""
+                SELECT
+                    t.id,
+                    t.name,
+                    t.description,
+                    t.icon_url,
+                    c.name as category,
+                    COUNT(cl.id) as click_count
+                FROM tools t
+                JOIN categories c ON t.category_id = c.id
+                LEFT JOIN click_logs cl ON t.id = cl.tool_id
+                WHERE t.is_active = 1
+                    AND (c.name LIKE :scenario
+                         OR t.name LIKE :scenario
+                         OR t.description LIKE :scenario)
+                GROUP BY t.id, t.name, t.description, t.icon_url, c.name
+                ORDER BY click_count DESC
+                LIMIT :limit
+            """)
+
+            result = await session.execute(
+                category_query,
+                {"scenario": f"%{scenario}%", "limit": limit}
+            )
+            rows = result.fetchall()
+
+            recommended = [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2][:100] if row[2] else None,
+                    "icon_url": row[3],
+                    "category": row[4],
+                    "click_count": row[5],
+                    "reason": f"属于「{row[4]}」分类，点击量 {row[5]}",
+                }
+                for row in rows
+            ]
+
+            return {
+                "scenario": scenario,
+                "recommended": recommended,
+                "total": len(recommended),
+            }
