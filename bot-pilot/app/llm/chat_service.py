@@ -84,7 +84,7 @@ class ChatService:
         """
         logger.debug(f"📤 调用 OpenAI, 消息数: {len(messages)}")
 
-        # 第一次调用
+        # 第一次调用（带工具）
         response = await self.client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
@@ -94,17 +94,41 @@ class ChatService:
             temperature=settings.openai_temperature,
         )
 
-        logger.debug(f"📥 OpenAI 响应 choices 数: {len(response.choices) if response.choices else 0}")
+        # 详细打印响应
+        logger.info(f"📥 OpenAI 原始响应: id={response.id}, model={response.model}, "
+                    f"choices数={len(response.choices) if response.choices else 0}, "
+                    f"usage={response.usage}")
+        if response.choices:
+            for i, choice in enumerate(response.choices):
+                logger.info(f"📥 choice[{i}]: finish_reason={choice.finish_reason}, "
+                           f"content={choice.message.content[:100] if choice.message.content else None}..., "
+                           f"tool_calls={len(choice.message.tool_calls) if choice.message.tool_calls else 0}个")
 
+        # 如果带工具的请求返回空 choices，尝试不带工具重试
         if not response.choices:
-            logger.error(f"❌ OpenAI 返回空 choices: {response}")
-            return "抱歉，AI 服务暂时无法响应，请稍后再试。"
+            logger.warning("⚠️ 带工具请求返回空 choices，尝试不带工具重试...")
+            response = await self.client.chat.completions.create(
+                model=settings.openai_model,
+                messages=messages,
+                max_tokens=settings.openai_max_tokens,
+                temperature=settings.openai_temperature,
+            )
+            logger.info(f"📥 重试响应: choices数={len(response.choices) if response.choices else 0}")
+
+            if not response.choices:
+                logger.error(f"❌ OpenAI 返回空 choices: {response}")
+                return "抱歉，AI 服务暂时无法响应，请稍后再试。"
+
+            # 不带工具，直接返回
+            return response.choices[0].message.content or ""
 
         assistant_message = response.choices[0].message
 
         # 检查是否有工具调用
         if assistant_message.tool_calls:
             logger.info(f"🔧 触发工具调用: {len(assistant_message.tool_calls)} 个")
+            for tc in assistant_message.tool_calls:
+                logger.info(f"🔧 工具: {tc.function.name}, 参数: {tc.function.arguments}")
 
             # 执行工具调用
             tool_results = await self._execute_tools(assistant_message.tool_calls)
@@ -114,12 +138,18 @@ class ChatService:
             messages.extend(tool_results)
 
             # 第二次调用 (带工具结果)
+            logger.debug(f"📤 第二次调用 OpenAI, 消息数: {len(messages)}")
             second_response = await self.client.chat.completions.create(
                 model=settings.openai_model,
                 messages=messages,
                 max_tokens=settings.openai_max_tokens,
                 temperature=settings.openai_temperature,
             )
+
+            logger.info(f"📥 第二次响应: choices数={len(second_response.choices) if second_response.choices else 0}, "
+                       f"usage={second_response.usage}")
+            if second_response.choices:
+                logger.info(f"📥 第二次 content: {second_response.choices[0].message.content[:200] if second_response.choices[0].message.content else None}...")
 
             if not second_response.choices:
                 logger.error(f"❌ OpenAI 第二次调用返回空 choices: {second_response}")
