@@ -82,7 +82,7 @@ class ChatService:
         """
         调用 OpenAI API，支持 Function Calling
         """
-        logger.debug(f"📤 调用 OpenAI, 消息数: {len(messages)}")
+        logger.info(f"📤 调用 OpenAI, base_url={settings.openai_base_url}, model={settings.openai_model}, 消息数={len(messages)}")
 
         # 第一次调用（带工具）
         response = await self.client.chat.completions.create(
