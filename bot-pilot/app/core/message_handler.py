@@ -67,12 +67,7 @@ class MessageHandler:
                 await handler(chat_id, message_id, text, open_id)
                 return
 
-        # 2. 发送"思考中"提示
-        thinking_msg_id = await self.feishu.send_text(
-            chat_id, settings.thinking_message, reply_to=message_id
-        )
-
-        # 3. 调用 ChatService 处理
+        # 2. 调用 ChatService 处理并直接回复
         try:
             response = await self.chat_service.chat(
                 user_id=open_id,
@@ -80,19 +75,13 @@ class MessageHandler:
                 chat_id=chat_id,
             )
 
-            # 4. 更新或发送回复
-            if thinking_msg_id:
-                await self.feishu.update_message(thinking_msg_id, response)
-            else:
-                await self.feishu.send_reply(chat_id, message_id, response)
+            # 3. 发送回复
+            await self.feishu.send_reply(chat_id, message_id, response)
 
         except Exception as e:
             logger.error(f"❌ ChatService 异常: {e}")
             error_text = "抱歉，处理消息时遇到了问题，请稍后再试。"
-            if thinking_msg_id:
-                await self.feishu.update_message(thinking_msg_id, error_text)
-            else:
-                await self.feishu.send_text(chat_id, error_text, reply_to=message_id)
+            await self.feishu.send_text(chat_id, error_text, reply_to=message_id)
 
     def _extract_text(self, content: dict) -> str:
         """从消息内容中提取文本"""
@@ -157,10 +146,6 @@ class MessageHandler:
 
     async def _cmd_overview(self, chat_id: str, message_id: str, text: str, open_id: str):
         """今日数据概览"""
-        # 调用 ChatService 触发 get_overview 工具
-        await self.feishu.send_text(
-            chat_id, settings.thinking_message, reply_to=message_id
-        )
         response = await self.chat_service.chat(
             user_id=open_id,
             message="请查询今日数据概览",
@@ -170,9 +155,6 @@ class MessageHandler:
 
     async def _cmd_tool_ranking(self, chat_id: str, message_id: str, text: str, open_id: str):
         """工具排行"""
-        await self.feishu.send_text(
-            chat_id, settings.thinking_message, reply_to=message_id
-        )
         response = await self.chat_service.chat(
             user_id=open_id,
             message="请查询最近7天的工具排行榜",
@@ -182,9 +164,6 @@ class MessageHandler:
 
     async def _cmd_user_ranking(self, chat_id: str, message_id: str, text: str, open_id: str):
         """用户排行"""
-        await self.feishu.send_text(
-            chat_id, settings.thinking_message, reply_to=message_id
-        )
         response = await self.chat_service.chat(
             user_id=open_id,
             message="请查询最近7天的用户活跃排行榜",
