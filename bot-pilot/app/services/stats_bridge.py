@@ -192,22 +192,15 @@ class StatsBridge:
             # 模糊搜索工具（大小写不敏感）
             from app.config import settings
 
-            if settings.is_sqlite:
-                # SQLite 的 LIKE 默认大小写不敏感
-                query = text("""
-                    SELECT id, name, description, icon_url, target_url, provider
-                    FROM tools
-                    WHERE name LIKE :name AND is_active = 1
-                    LIMIT 1
-                """)
-            else:
-                # PostgreSQL 用 ILIKE 实现大小写不敏感
-                query = text("""
-                    SELECT id, name, description, icon_url, target_url, provider
-                    FROM tools
-                    WHERE name ILIKE :name AND is_active = 1
-                    LIMIT 1
-                """)
+            like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+            active_val = "1" if settings.is_sqlite else "true"
+
+            query = text(f"""
+                SELECT id, name, description, icon_url, target_url, provider
+                FROM tools
+                WHERE name {like_op} :name AND is_active = {active_val}
+                LIMIT 1
+            """)
 
             result = await session.execute(query, {"name": f"%{tool_name}%"})
             tool = result.fetchone()
@@ -321,15 +314,16 @@ class StatsBridge:
         async with async_session() as session:
             from app.config import settings
 
-            # 根据数据库类型选择 LIKE 或 ILIKE
+            # 根据数据库类型选择 LIKE/ILIKE 和 boolean 值
             like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+            active_val = "1" if settings.is_sqlite else "true"
 
             if category:
                 query = text(f"""
                     SELECT t.id, t.name, t.description, t.icon_url, c.name as category
                     FROM tools t
                     LEFT JOIN categories c ON t.category_id = c.id
-                    WHERE t.is_active = 1
+                    WHERE t.is_active = {active_val}
                         AND (t.name {like_op} :keyword OR t.description {like_op} :keyword)
                         AND c.name {like_op} :category
                     LIMIT 20
@@ -340,7 +334,7 @@ class StatsBridge:
                     SELECT t.id, t.name, t.description, t.icon_url, c.name as category
                     FROM tools t
                     LEFT JOIN categories c ON t.category_id = c.id
-                    WHERE t.is_active = 1
+                    WHERE t.is_active = {active_val}
                         AND (t.name {like_op} :keyword OR t.description {like_op} :keyword)
                     LIMIT 20
                 """)
@@ -632,7 +626,9 @@ class StatsBridge:
 
     async def _get_tool_count(self, session: AsyncSession) -> int:
         """获取工具总数"""
-        query = text("SELECT COUNT(*) FROM tools WHERE is_active = 1")
+        from app.config import settings
+        active_val = "1" if settings.is_sqlite else "true"
+        query = text(f"SELECT COUNT(*) FROM tools WHERE is_active = {active_val}")
         result = await session.execute(query)
         return result.scalar() or 0
 
@@ -702,7 +698,10 @@ class StatsBridge:
         获取工具互动排行（收藏+点赞）
         """
         async with async_session() as session:
-            query = text("""
+            from app.config import settings
+            active_val = "1" if settings.is_sqlite else "true"
+
+            query = text(f"""
                 SELECT
                     t.id,
                     t.name,
@@ -721,7 +720,7 @@ class StatsBridge:
                     FROM user_likes
                     GROUP BY tool_id
                 ) l ON t.id = l.tool_id
-                WHERE t.is_active = 1
+                WHERE t.is_active = {active_val}
                 ORDER BY score DESC
                 LIMIT :limit
             """)
@@ -752,9 +751,12 @@ class StatsBridge:
         获取热门新工具（最近新增且点击量高）
         """
         async with async_session() as session:
+            from app.config import settings
+            active_val = "1" if settings.is_sqlite else "true"
+
             start_date = datetime.now().date() - timedelta(days=days)
 
-            query = text("""
+            query = text(f"""
                 SELECT
                     t.id,
                     t.name,
@@ -764,7 +766,7 @@ class StatsBridge:
                     COUNT(c.id) as click_count
                 FROM tools t
                 LEFT JOIN click_logs c ON t.id = c.tool_id
-                WHERE t.is_active = 1
+                WHERE t.is_active = {active_val}
                     AND DATE(t.created_at) >= :start_date
                 GROUP BY t.id, t.name, t.description, t.icon_url, t.created_at
                 ORDER BY click_count DESC
@@ -864,6 +866,7 @@ class StatsBridge:
 
             from app.config import settings
             like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+            active_val = "1" if settings.is_sqlite else "true"
 
             keywords = []
             for row in rows:
@@ -873,7 +876,7 @@ class StatsBridge:
                 # 检查是否有匹配的工具（大小写不敏感）
                 check_query = text(f"""
                     SELECT COUNT(*) FROM tools
-                    WHERE is_active = 1
+                    WHERE is_active = {active_val}
                         AND (name {like_op} :kw OR description {like_op} :kw)
                 """)
                 check_result = await session.execute(
@@ -902,6 +905,7 @@ class StatsBridge:
         async with async_session() as session:
             from app.config import settings
             like_op = "LIKE" if settings.is_sqlite else "ILIKE"
+            active_val = "1" if settings.is_sqlite else "true"
 
             # 先从分类名称匹配（大小写不敏感）
             category_query = text(f"""
@@ -915,7 +919,7 @@ class StatsBridge:
                 FROM tools t
                 JOIN categories c ON t.category_id = c.id
                 LEFT JOIN click_logs cl ON t.id = cl.tool_id
-                WHERE t.is_active = 1
+                WHERE t.is_active = {active_val}
                     AND (c.name {like_op} :scenario
                          OR t.name {like_op} :scenario
                          OR t.description {like_op} :scenario)
