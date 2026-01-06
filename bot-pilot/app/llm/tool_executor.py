@@ -3,6 +3,8 @@ MCP 工具执行器
 将工具调用桥接到实际的服务
 """
 
+import json
+import traceback
 from typing import Any
 
 from loguru import logger
@@ -55,10 +57,17 @@ class ToolExecutor:
 
         try:
             result = await handler(**arguments)
-            logger.info(f"✅ 工具执行成功: {function_name}")
+            # 打印返回结果（截断过长内容）
+            result_str = json.dumps(result, ensure_ascii=False, default=str)
+            if len(result_str) > 500:
+                result_preview = result_str[:500] + f"... (共{len(result_str)}字符)"
+            else:
+                result_preview = result_str
+            logger.info(f"✅ 工具执行成功: {function_name}, 返回: {result_preview}")
             return result
         except Exception as e:
             logger.error(f"❌ 工具执行失败 {function_name}: {e}")
+            logger.error(f"堆栈: {traceback.format_exc()}")
             return {"error": str(e)}
 
     async def _get_overview(self) -> dict:
