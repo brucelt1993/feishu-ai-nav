@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 项目概述
 
 飞书工作台H5网页应用，提供AI工具导航和使用统计功能。前后端分离架构，支持飞书免登认证。
+包含三个服务：frontend (Vue3)、backend (FastAPI)、bot-pilot (飞书机器人)。
 
 ## 常用命令
 
@@ -23,6 +24,13 @@ npm run dev               # 启动开发服务器 (端口3000)
 npm run build             # 生产构建
 ```
 
+### 机器人服务开发
+```bash
+cd bot-pilot
+uv sync                                    # 安装依赖
+uv run uvicorn app.main:app --reload --port 8001  # 启动开发服务器
+```
+
 ### 数据库初始化
 ```bash
 # PostgreSQL
@@ -35,7 +43,7 @@ psql -U postgres -f sql/init.sql
 ### Docker部署
 ```bash
 cp .env.example .env       # 配置环境变量
-docker-compose up -d
+docker-compose up -d       # 启动所有服务 (frontend, backend, bot-pilot)
 ```
 
 ## 架构概览
@@ -90,6 +98,30 @@ frontend/src/
     └── FeedbackDialog.vue
 ```
 
+### 机器人服务结构 (Bot-Pilot)
+```
+bot-pilot/app/
+├── main.py              # 应用入口
+├── config.py            # 配置管理
+├── api/
+│   ├── callback.py     # 飞书事件回调
+│   └── health.py       # 健康检查
+├── core/
+│   ├── event_handler.py    # 事件处理器
+│   └── message_handler.py  # 消息处理
+├── llm/
+│   ├── chat_service.py     # OpenAI 聊天服务
+│   ├── mcp_tools.py        # MCP 工具定义 (10个)
+│   ├── prompt_manager.py   # System Prompt
+│   └── tool_executor.py    # 工具执行器
+├── services/
+│   ├── database.py         # 数据库连接
+│   ├── feishu_client.py    # 飞书客户端
+│   └── stats_bridge.py     # 统计服务桥接
+└── cards/
+    └── builder.py          # 卡片消息构建器
+```
+
 ## 关键设计
 
 ### 双数据库支持
@@ -104,6 +136,10 @@ frontend/src/
 ### API代理
 前端开发时，vite.config.js配置 `/api` 代理到后端8000端口
 
+### 机器人触发方式
+- 私聊：直接发消息
+- 群聊：@机器人 + 消息
+
 ## 环境变量
 
 | 变量 | 说明 |
@@ -114,3 +150,5 @@ frontend/src/
 | `ADMIN_OPEN_IDS` | 管理员open_id列表（逗号分隔） |
 | `PUSH_CHAT_ID` | 统计推送目标群ID |
 | `PUSH_CRON` | 推送cron表达式 |
+| `OPENAI_API_KEY` | OpenAI API密钥 (bot-pilot) |
+| `OPENAI_MODEL` | OpenAI模型 (默认gpt-4o) |

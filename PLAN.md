@@ -1,7 +1,13 @@
 # 飞书机器人服务设计方案
 
 > 共创时间：2026-01-05
-> 状态：设计中
+> 状态：✅ 已确认，准备实施
+
+## 确认决策
+- 服务名称：**bot-pilot**
+- 权限控制：**全员可查**
+- OpenAI模型：**gpt-4o**
+- MCP工具：**10个**（原8个 + 留存分析 + 时段分布）
 
 ---
 
@@ -114,7 +120,7 @@ feishu-ai-nav/
 
 ### 3.3 MCP 工具能力 (运营数据查询)
 
-**建议的 MCP Tools**：
+**MCP Tools 列表（10个）**：
 
 | Tool Name | 描述 | 示例触发 |
 |-----------|------|---------|
@@ -126,6 +132,8 @@ feishu-ai-nav/
 | `get_feedback_summary` | 反馈汇总 | "最近有什么反馈" |
 | `search_tools` | 搜索工具 | "有什么画图工具" |
 | `get_category_stats` | 分类统计 | "哪个分类最受欢迎" |
+| `get_retention_stats` | 用户留存分析 | "用户留存怎么样" |
+| `get_hourly_distribution` | 时段分布 | "什么时间段访问最多" |
 
 **MCP 实现方式**：
 使用 OpenAI Function Calling，将工具定义为 functions：
@@ -411,7 +419,7 @@ FEISHU_VERIFICATION_TOKEN=xxx    # 事件验证 Token
 # OpenAI 配置
 OPENAI_API_KEY=sk-xxx
 OPENAI_BASE_URL=https://api.openai.com/v1  # 支持代理
-OPENAI_MODEL=gpt-4o-mini                    # 默认模型
+OPENAI_MODEL=gpt-4o                         # 默认模型
 
 # 数据库 (复用现有)
 DATABASE_URL=postgresql://user:pass@localhost/feishu_nav
@@ -457,33 +465,7 @@ LOG_LEVEL=INFO
 
 ---
 
-## 八、待讨论问题
-
-1. **服务名称确认**：`bot-pilot` 是否满意？或有其他偏好？
-
-2. **MCP 工具范围**：
-   - 上述 8 个工具是否足够？
-   - 是否需要增加其他运营数据查询能力？
-
-3. **OpenAI 模型选择**：
-   - 默认用 gpt-4o-mini（成本低、速度快）
-   - 复杂场景可否升级到 gpt-4o？
-
-4. **权限控制**：
-   - 数据查询是否需要限制特定用户？
-   - 还是所有 @机器人 的用户都能查？
-
-5. **部署方式**：
-   - 和现有 backend 合并部署？
-   - 还是独立服务（推荐）？
-
-6. **消息历史**：
-   - 是否需要记录机器人对话历史？
-   - 用于后续分析和优化
-
----
-
-## 九、技术风险
+## 八、技术风险
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|

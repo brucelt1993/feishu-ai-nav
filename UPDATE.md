@@ -1,5 +1,22 @@
 # 项目更新日志
 
+## 2026-01-05
+
+### 新增 Bot-Pilot 飞书机器人服务
+- [新服务] 创建 `bot-pilot/` 独立服务目录，端口 8001
+- [机器人] 飞书事件回调接口 (`/api/callback`)，支持 v1/v2 格式
+- [机器人] 消息处理核心：事件去重、@机器人识别、快捷命令
+- [AI] 集成 OpenAI API (gpt-4o)，支持多轮对话上下文
+- [AI] System Prompt 角色限定：只回答 AI 导航相关问题
+- [MCP] 10 个数据查询工具：概览/排行/趋势/留存/时段分布等
+- [MCP] 工具执行器桥接 StatsService，复用现有统计能力
+- [统计] 新增留存分析 (日/周/月留存率)
+- [统计] 新增时段分布分析 (24小时访问分布)
+- [卡片] CardBuilder 构建精美飞书卡片：概览/排行/搜索/留存/时段
+- [部署] 新增 Dockerfile，集成到 docker-compose.yml
+- [配置] 更新 .env.example 添加 OpenAI 配置
+- [文档] 更新 CLAUDE.md，完整 README 和 .env.example
+
 ## 2026-01-04
 
 ### UI优化与功能增强
