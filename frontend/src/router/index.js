@@ -103,6 +103,15 @@ router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   const publicPages = ['LoginLoading', 'AdminLogin']  // 不需要登录的页面
 
+  // 调试日志
+  console.log('[Router] 路由守卫检查:', {
+    to: to.name,
+    isInFeishu: isInFeishu(),
+    isLoggedIn: userStore.isLoggedIn,
+    allowAnonymous,
+    shouldRedirect: isInFeishu() && !userStore.isLoggedIn && !allowAnonymous && !publicPages.includes(to.name)
+  })
+
   // 如果：在飞书环境 + 未登录 + 不允许匿名 + 不是公开页面 → 跳转登录页
   if (
     isInFeishu() &&
@@ -110,6 +119,7 @@ router.beforeEach((to, from, next) => {
     !allowAnonymous &&
     !publicPages.includes(to.name)
   ) {
+    console.log('[Router] 跳转到登录页')
     next({ name: 'LoginLoading' })
     return
   }

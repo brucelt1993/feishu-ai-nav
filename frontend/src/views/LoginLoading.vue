@@ -106,7 +106,14 @@ async function doLogin() {
 
   } catch (e) {
     console.error('登录失败:', e)
-    error.value = e.message || '登录失败，请重试'
+    // 根据错误码显示友好提示
+    if (e.errno === 2602002 || e.errString?.includes('invalid url')) {
+      error.value = '应用配置错误，请联系管理员检查飞书应用URL配置'
+    } else if (e.errString?.includes('cancel')) {
+      error.value = '登录已取消'
+    } else {
+      error.value = e.message || e.errString || '登录失败，请重试'
+    }
   }
 }
 
