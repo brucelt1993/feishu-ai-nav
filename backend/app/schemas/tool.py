@@ -4,6 +4,14 @@ from datetime import datetime
 from typing import Optional, List
 
 
+class ToolCardStats(BaseModel):
+    """工具卡片统计信息（内嵌在工具列表响应中）"""
+    like_count: int = 0
+    favorite_count: int = 0
+    is_liked: bool = False
+    is_favorited: bool = False
+
+
 class ToolBase(BaseModel):
     """工具基础字段"""
     name: str
@@ -60,6 +68,7 @@ class ToolResponse(ToolBase):
     updated_at: datetime
     category: Optional[CategoryBrief] = None
     tags: List[TagBrief] = []
+    stats: Optional[ToolCardStats] = None  # 工具统计（可选，列表接口返回）
 
     class Config:
         from_attributes = True

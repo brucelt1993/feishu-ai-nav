@@ -8,13 +8,30 @@ from datetime import datetime, timedelta
 import logging
 
 from ..database import get_db
-from ..models import Tool, User, ClickLog, UserLike, Category, Tag
-from ..schemas import ToolResponse, TagSimple
+from ..models import Tool, User, ClickLog, UserLike, UserFavorite, Category, Tag
+from ..schemas.tool import ToolResponse, ToolCardStats
+from ..schemas import TagSimple
 from ..services.click_service import should_record_click
 from .auth import verify_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def get_optional_user_id(
+    authorization: Optional[str],
+    db: AsyncSession
+) -> Optional[int]:
+    """获取当前用户ID（可选，未登录返回 None）"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization[7:]
+    try:
+        open_id = verify_token(token)
+        result = await db.execute(select(User.id).where(User.open_id == open_id))
+        return result.scalar_one_or_none()
+    except Exception:
+        return None
 
 
 @router.get("", response_model=list[ToolResponse])
@@ -24,9 +41,11 @@ async def get_tools(
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     category_id: Optional[int] = Query(None, description="分类ID筛选"),
     tag_id: Optional[int] = Query(None, description="标签ID筛选"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="返回数量限制"),
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取工具列表（支持搜索和排序）"""
+    """获取工具列表（支持搜索和排序，包含统计信息）"""
     query = select(Tool).options(selectinload(Tool.category), selectinload(Tool.tags)).where(Tool.is_active == True)
 
     # 分类筛选
@@ -71,9 +90,67 @@ async def get_tools(
         # 默认按 sort_order
         query = query.order_by(Tool.sort_order, Tool.id)
 
+    # 数量限制
+    if limit:
+        query = query.limit(limit)
+
     result = await db.execute(query)
     tools = result.scalars().all()
-    return [ToolResponse.model_validate(t) for t in tools]
+
+    if not tools:
+        return []
+
+    # 批量获取工具统计信息
+    tool_ids = [t.id for t in tools]
+
+    # 批量查询点赞数
+    like_result = await db.execute(
+        select(UserLike.tool_id, func.count().label("cnt"))
+        .where(UserLike.tool_id.in_(tool_ids))
+        .group_by(UserLike.tool_id)
+    )
+    like_counts = {row.tool_id: row.cnt for row in like_result.all()}
+
+    # 批量查询收藏数
+    fav_result = await db.execute(
+        select(UserFavorite.tool_id, func.count().label("cnt"))
+        .where(UserFavorite.tool_id.in_(tool_ids))
+        .group_by(UserFavorite.tool_id)
+    )
+    fav_counts = {row.tool_id: row.cnt for row in fav_result.all()}
+
+    # 获取当前用户的点赞/收藏状态
+    user_liked_ids = set()
+    user_fav_ids = set()
+    user_id = await get_optional_user_id(authorization, db)
+    if user_id:
+        # 批量查询用户点赞
+        liked_result = await db.execute(
+            select(UserLike.tool_id)
+            .where(UserLike.user_id == user_id, UserLike.tool_id.in_(tool_ids))
+        )
+        user_liked_ids = {row[0] for row in liked_result.all()}
+
+        # 批量查询用户收藏
+        fav_result = await db.execute(
+            select(UserFavorite.tool_id)
+            .where(UserFavorite.user_id == user_id, UserFavorite.tool_id.in_(tool_ids))
+        )
+        user_fav_ids = {row[0] for row in fav_result.all()}
+
+    # 组装响应
+    responses = []
+    for t in tools:
+        tool_resp = ToolResponse.model_validate(t)
+        tool_resp.stats = ToolCardStats(
+            like_count=like_counts.get(t.id, 0),
+            favorite_count=fav_counts.get(t.id, 0),
+            is_liked=t.id in user_liked_ids,
+            is_favorited=t.id in user_fav_ids,
+        )
+        responses.append(tool_resp)
+
+    return responses
 
 
 @router.get("/search")

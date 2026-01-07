@@ -447,25 +447,25 @@ watch(currentMode, async (mode) => {
 })
 
 onMounted(async () => {
-  // 并行加载数据
-  const dataPromises = [
+  // 所有请求并行发起
+  const promises = [
     loadCategories(),
     loadTags(),
+    loadHotwords(),
   ]
 
-  // 热词和历史不影响主体，静默加载
-  loadHotwords()
+  // 已登录才加载历史
   if (userStore.isLoggedIn) {
-    fetchHistory()
+    fetchHistory()  // 不阻塞
+  }
+
+  // 全局模式下也并行加载工具列表
+  if (currentMode.value === 'global') {
+    promises.push(loadGlobalTools())
   }
 
   // 等待核心数据加载完成
-  await Promise.all(dataPromises)
-
-  // 如果当前是全局模式，加载全部工具
-  if (currentMode.value === 'global') {
-    await loadGlobalTools()
-  }
+  await Promise.all(promises)
 })
 
 // 清理搜索超时

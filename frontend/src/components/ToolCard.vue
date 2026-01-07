@@ -165,15 +165,19 @@ const showFeedbackDialog = ref(false)
 const showWantDialog = ref(false)
 const showDetailDialog = ref(false)
 
+// 优先使用 props.tool.stats（列表接口已返回），无需额外请求
 const stats = ref({
-  like_count: 0,
-  favorite_count: 0,
-  is_liked: false,
-  is_favorited: false
+  like_count: props.tool.stats?.like_count ?? 0,
+  favorite_count: props.tool.stats?.favorite_count ?? 0,
+  is_liked: props.tool.stats?.is_liked ?? false,
+  is_favorited: props.tool.stats?.is_favorited ?? false
 })
 
 onMounted(async () => {
-  await loadStats()
+  // 如果 props.tool.stats 已存在，则不需要额外请求
+  if (!props.tool.stats) {
+    await loadStats()
+  }
 })
 
 async function loadStats() {

@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
+from .tool import ToolCardStats
+
 
 class CategoryBase(BaseModel):
     name: str
@@ -35,6 +37,7 @@ class ToolBrief(BaseModel):
     target_url: str
     provider: Optional[str] = None
     sort_order: int = 0
+    stats: Optional[ToolCardStats] = None  # 工具统计
 
     class Config:
         from_attributes = True
