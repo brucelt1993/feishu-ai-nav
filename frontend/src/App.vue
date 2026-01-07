@@ -9,9 +9,18 @@ import { useTheme } from '@/composables/useTheme'
 
 useTheme()
 
-onMounted(async () => {
-  // 初始化飞书JSSDK
-  await initFeishuSDK()
+onMounted(() => {
+  window.__PERF__?.mark('App.vue mounted')
+
+  // 初始化飞书JSSDK（非阻塞，不影响页面渲染）
+  initFeishuSDK()
+    .then(result => {
+      window.__PERF__?.mark(`飞书SDK初始化完成(${result ? '成功' : '跳过'})`)
+    })
+    .catch(e => {
+      console.warn('SDK初始化失败:', e)
+      window.__PERF__?.mark('飞书SDK初始化失败')
+    })
 })
 </script>
 

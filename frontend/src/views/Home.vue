@@ -446,26 +446,42 @@ watch(currentMode, async (mode) => {
   }
 })
 
-onMounted(async () => {
-  // 所有请求并行发起
-  const promises = [
-    loadCategories(),
-    loadTags(),
-    loadHotwords(),
-  ]
+onMounted(() => {
+  window.__PERF__?.mark('Home.vue mounted')
 
-  // 已登录才加载历史
+  // 非阻塞加载 - 让页面先渲染骨架屏
+  // 各个加载函数内部已有错误处理，这里只需触发
+
+  // 核心数据加载（分类）
+  loadCategories()
+    .then(() => window.__PERF__?.mark('分类数据加载完成'))
+    .catch(e => console.warn('加载分类失败:', e))
+
+  // 次要数据并行加载（不阻塞页面）
+  loadTags()
+    .then(() => window.__PERF__?.mark('标签数据加载完成'))
+    .catch(e => console.warn('加载标签失败:', e))
+
+  loadHotwords()
+    .then(() => window.__PERF__?.mark('热词数据加载完成'))
+    .catch(e => console.warn('加载热词失败:', e))
+
+  // 已登录才加载历史（不阻塞）
   if (userStore.isLoggedIn) {
-    fetchHistory()  // 不阻塞
+    fetchHistory()
   }
 
-  // 全局模式下也并行加载工具列表
+  // 全局模式下也加载工具列表
   if (currentMode.value === 'global') {
-    promises.push(loadGlobalTools())
+    loadGlobalTools()
+      .then(() => window.__PERF__?.mark('全局工具加载完成'))
+      .catch(e => console.warn('加载工具失败:', e))
   }
 
-  // 等待核心数据加载完成
-  await Promise.all(promises)
+  // 3秒后输出性能汇总
+  setTimeout(() => {
+    window.__PERF__?.summary()
+  }, 3000)
 })
 
 // 清理搜索超时

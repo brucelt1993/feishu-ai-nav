@@ -8,13 +8,22 @@ export async function initFeishuSDK() {
   try {
     // 检查SDK是否加载
     if (!window.h5sdk) {
-      console.error('飞书SDK未加载，请确保在飞书环境中打开')
+      console.warn('飞书SDK未加载，非飞书环境')
       return false
     }
 
-    // 获取jsapi_ticket配置
+    // 获取jsapi_ticket配置（带超时）
     const url = window.location.href.split('#')[0]
-    const config = await feishuApi.getJsapiTicket(url)
+    let config
+    try {
+      config = await Promise.race([
+        feishuApi.getJsapiTicket(url),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('获取配置超时')), 5000))
+      ])
+    } catch (e) {
+      console.error('获取JSSDK配置失败:', e)
+      return false
+    }
 
     if (config.error) {
       console.error('获取JSSDK配置失败:', config.error)
@@ -24,7 +33,7 @@ export async function initFeishuSDK() {
     // 保存appId供后续使用
     window.__FEISHU_APP_ID__ = config.appId
 
-    // 配置JSSDK
+    // 配置JSSDK（非阻塞）
     window.h5sdk.config({
       appId: config.appId,
       timestamp: config.timestamp,
@@ -39,13 +48,21 @@ export async function initFeishuSDK() {
       }
     })
 
-    // 等待ready
-    await new Promise((resolve) => {
-      window.h5sdk.ready(() => {
-        console.info('飞书JSSDK ready')
-        resolve()
+    // 等待ready（带超时，最多3秒）
+    await Promise.race([
+      new Promise((resolve) => {
+        window.h5sdk.ready(() => {
+          console.info('飞书JSSDK ready')
+          resolve(true)
+        })
+      }),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          console.warn('飞书JSSDK ready超时，继续执行')
+          resolve(false)
+        }, 3000)
       })
-    })
+    ])
 
     return true
   } catch (error) {
