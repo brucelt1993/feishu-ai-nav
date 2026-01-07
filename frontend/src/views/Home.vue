@@ -9,12 +9,13 @@
           <el-icon :size="18"><component :is="isDark ? Sunny : Moon" /></el-icon>
         </button>
         <button
-          class="want-tool-btn"
+          class="want-tool-btn disabled"
           v-if="userStore.isLoggedIn"
-          @click="showWantDialog = true"
+          disabled
+          title="功能开发中，敬请期待"
         >
           <el-icon><Plus /></el-icon>
-          <span>想要工具</span>
+          <span>推荐工具</span>
         </button>
         <router-link to="/favorites" class="favorites-link" v-if="userStore.isLoggedIn">
           <el-icon><Collection /></el-icon>
@@ -758,10 +759,15 @@ function handleStatsChange({ toolId, stats }) {
 }
 
 .favorites-link:hover,
-.want-tool-btn:hover {
+.want-tool-btn:hover:not(.disabled) {
   background: rgba(255, 255, 255, 0.25);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.want-tool-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .user-info {
