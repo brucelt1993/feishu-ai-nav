@@ -22,10 +22,11 @@ engine = create_async_engine(
     echo=settings.debug,
     future=True,
     # 连接池优化
-    pool_recycle=300,  # 每 5 分钟回收连接，避免服务器端超时断开
+    pool_recycle=60,  # 每 1 分钟回收连接，避免 Docker 网络超时断开
     pool_pre_ping=True,  # 使用前检测连接是否有效
     pool_size=5,  # 连接池大小
     max_overflow=10,  # 最大溢出连接数
+    pool_timeout=30,  # 获取连接超时时间
 )
 
 async_session = async_sessionmaker(

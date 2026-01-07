@@ -51,7 +51,8 @@ class MessageHandler:
 
         # 群聊需要 @ 机器人才响应
         if chat_type == "group":
-            if not self._is_mentioned(mentions):
+            is_mentioned = await self._is_mentioned(mentions)
+            if not is_mentioned:
                 logger.debug("⏭️ 群聊消息未 @ 机器人，跳过")
                 return
             # 移除 @ 部分
@@ -90,22 +91,36 @@ class MessageHandler:
             return content["text"]
         return ""
 
-    def _is_mentioned(self, mentions: list) -> bool:
-        """检查是否 @ 了机器人"""
+    async def _is_mentioned(self, mentions: list) -> bool:
+        """检查是否 @ 了机器人自己"""
         if not mentions:
             return False
-        # 检查 mentions 中是否包含机器人
+
+        # 获取机器人的 open_id
+        try:
+            bot_open_id = await self.feishu.get_bot_open_id()
+        except Exception as e:
+            logger.warning(f"⚠️ 获取机器人 open_id 失败，使用降级判断: {e}")
+            bot_open_id = None
+
+        # 检查 mentions 中是否包含机器人（只响应 @ 机器人自己）
         for mention in mentions:
-            # 机器人的 id.open_id 以 "ou_" 开头
-            # 或者 name 匹配机器人名称
+            mention_key = mention.get("key", "")
             id_info = mention.get("id", {})
-            if id_info.get("open_id", "").startswith("ou_"):
-                # 这里简化处理，实际可以检查是否是本机器人
+            mention_open_id = id_info.get("open_id", "")
+
+            # 优先使用 open_id 精确匹配
+            if bot_open_id and mention_open_id == bot_open_id:
+                logger.debug(f"✅ 检测到 @ 机器人: {mention_open_id[:15]}...")
                 return True
-            # 也可能是 @ 全体
-            if mention.get("key") == "@_all":
+
+            # 降级判断：@ 用户的 key 格式是 @_user_N，@ 机器人不是这个格式
+            if bot_open_id is None and not mention_key.startswith("@_user_"):
+                logger.debug(f"✅ 降级判断: key={mention_key} 可能是机器人")
                 return True
-        return True  # 有 mentions 就认为是 @ 了
+
+        logger.debug(f"⏭️ 未 @ 机器人，mentions: {[(m.get('key'), m.get('name')) for m in mentions]}")
+        return False
 
     def _remove_mentions(self, text: str) -> str:
         """移除 @ 部分"""

@@ -21,6 +21,26 @@ class FeishuClient:
     def __init__(self):
         self._tenant_access_token: Optional[str] = None
         self._token_expires_at: float = 0
+        self._bot_open_id: Optional[str] = None  # 机器人的 open_id
+
+    async def get_bot_open_id(self) -> str:
+        """
+        获取机器人的 open_id (带缓存)
+        """
+        if self._bot_open_id:
+            return self._bot_open_id
+
+        result = await self._request("GET", "/bot/v3/info/")
+
+        if result.get("code") != 0:
+            logger.error(f"❌ 获取机器人信息失败: {result}")
+            raise Exception(f"获取机器人信息失败: {result.get('msg')}")
+
+        bot_info = result.get("bot", {})
+        self._bot_open_id = bot_info.get("open_id", "")
+        logger.info(f"✅ 获取机器人 open_id: {self._bot_open_id[:15]}...")
+
+        return self._bot_open_id
 
     async def _get_tenant_access_token(self) -> str:
         """获取企业级 access_token"""

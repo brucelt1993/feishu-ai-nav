@@ -3,13 +3,34 @@ MCP 工具执行器
 将工具调用桥接到实际的服务
 """
 
+import asyncio
 import json
 import traceback
 from typing import Any
 
 from loguru import logger
+from sqlalchemy.exc import InterfaceError, OperationalError, DBAPIError
 
 from app.services.stats_bridge import StatsBridge
+from app.services.database import engine
+
+# 数据库连接错误重试配置
+MAX_RETRIES = 2
+RETRY_DELAY = 0.5  # 秒
+
+
+def _is_connection_error(e: Exception) -> bool:
+    """判断是否是数据库连接错误"""
+    error_msg = str(e).lower()
+    connection_keywords = [
+        "connection is closed",
+        "connection was closed",
+        "connection reset",
+        "connection refused",
+        "broken pipe",
+        "server closed the connection",
+    ]
+    return any(kw in error_msg for kw in connection_keywords)
 
 
 class ToolExecutor:
@@ -41,7 +62,7 @@ class ToolExecutor:
 
     async def execute(self, function_name: str, arguments: dict[str, Any]) -> Any:
         """
-        执行工具
+        执行工具（带重试机制）
 
         Args:
             function_name: 工具名称
@@ -55,20 +76,54 @@ class ToolExecutor:
             logger.warning(f"⚠️ 未知工具: {function_name}")
             return {"error": f"Unknown tool: {function_name}"}
 
-        try:
-            result = await handler(**arguments)
-            # 打印返回结果（截断过长内容）
-            result_str = json.dumps(result, ensure_ascii=False, default=str)
-            if len(result_str) > 500:
-                result_preview = result_str[:500] + f"... (共{len(result_str)}字符)"
-            else:
-                result_preview = result_str
-            logger.info(f"✅ 工具执行成功: {function_name}, 返回: {result_preview}")
-            return result
-        except Exception as e:
-            logger.error(f"❌ 工具执行失败 {function_name}: {e}")
-            logger.error(f"堆栈: {traceback.format_exc()}")
-            return {"error": str(e)}
+        # 带重试的执行
+        last_error = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                result = await handler(**arguments)
+                # 打印返回结果（截断过长内容）
+                result_str = json.dumps(result, ensure_ascii=False, default=str)
+                if len(result_str) > 500:
+                    result_preview = result_str[:500] + f"... (共{len(result_str)}字符)"
+                else:
+                    result_preview = result_str
+                logger.info(f"✅ 工具执行成功: {function_name}, 返回: {result_preview}")
+                return result
+            except (InterfaceError, OperationalError, DBAPIError) as e:
+                # 数据库错误，检查是否是连接问题
+                if _is_connection_error(e):
+                    last_error = e
+                    if attempt < MAX_RETRIES:
+                        logger.warning(
+                            f"⚠️ 数据库连接断开，重试中 ({attempt + 1}/{MAX_RETRIES}): {e}"
+                        )
+                        await asyncio.sleep(RETRY_DELAY)
+                        # 清理连接池中的无效连接
+                        await engine.dispose()
+                    else:
+                        logger.error(f"❌ 数据库连接错误，重试已用尽: {e}")
+                else:
+                    # 其他数据库错误，不重试
+                    logger.error(f"❌ 数据库错误 {function_name}: {e}")
+                    return {"error": str(e)}
+            except Exception as e:
+                # 检查是否是 asyncpg 的连接错误（可能未被 SQLAlchemy 包装）
+                if _is_connection_error(e):
+                    last_error = e
+                    if attempt < MAX_RETRIES:
+                        logger.warning(
+                            f"⚠️ 连接错误，重试中 ({attempt + 1}/{MAX_RETRIES}): {e}"
+                        )
+                        await asyncio.sleep(RETRY_DELAY)
+                        await engine.dispose()
+                    else:
+                        logger.error(f"❌ 连接错误，重试已用尽: {e}")
+                else:
+                    logger.error(f"❌ 工具执行失败 {function_name}: {e}")
+                    logger.error(f"堆栈: {traceback.format_exc()}")
+                    return {"error": str(e)}
+
+        return {"error": f"数据库连接失败: {last_error}"}
 
     async def _get_overview(self) -> dict:
         """获取今日概览"""
