@@ -253,6 +253,7 @@
                 :tool="tool"
                 :category-color="currentCategoryColor"
                 @click="handleToolClick"
+                @stats-change="handleStatsChange"
               />
             </div>
           </template>
@@ -274,6 +275,7 @@
                 :key="tool.id"
                 :tool="tool"
                 @click="handleToolClick"
+                @stats-change="handleStatsChange"
               />
             </div>
           </template>
@@ -307,6 +309,7 @@
                 :key="tool.id"
                 :tool="tool"
                 @click="handleToolClick"
+                @stats-change="handleStatsChange"
               />
             </div>
           </template>
@@ -659,6 +662,42 @@ async function handleToolClick(tool) {
   }
 
   openInFeishu(tool.target_url)
+}
+
+/**
+ * 处理工具统计变化（点赞/收藏）
+ * 更新本地 categories 数据，避免切换分类后状态丢失
+ */
+function handleStatsChange({ toolId, stats }) {
+  // 更新 categories 中的工具统计
+  for (const cat of categories.value) {
+    // 检查一级分类的工具
+    const tool = cat.tools?.find(t => t.id === toolId)
+    if (tool) {
+      tool.stats = { ...stats }
+      return
+    }
+    // 检查子分类的工具
+    for (const child of cat.children || []) {
+      const childTool = child.tools?.find(t => t.id === toolId)
+      if (childTool) {
+        childTool.stats = { ...stats }
+        return
+      }
+    }
+  }
+
+  // 更新 globalTools 中的工具统计
+  const globalTool = globalTools.value.find(t => t.id === toolId)
+  if (globalTool) {
+    globalTool.stats = { ...stats }
+  }
+
+  // 更新 searchResults 中的工具统计
+  const searchTool = searchResults.value.find(t => t.id === toolId)
+  if (searchTool) {
+    searchTool.stats = { ...stats }
+  }
 }
 </script>
 
