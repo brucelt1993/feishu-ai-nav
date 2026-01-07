@@ -11,6 +11,7 @@ from .api import api_router
 from .config import get_settings
 from .database import init_db
 from .tasks.scheduler import init_scheduler, shutdown_scheduler
+from .services.feishu_service import feishu_service
 
 settings = get_settings()
 
@@ -60,6 +61,15 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("SQLite数据库已初始化")
     init_scheduler()
+
+    # 预热飞书 Token 缓存（减少首次请求延迟）
+    try:
+        await feishu_service.get_tenant_access_token()
+        await feishu_service.get_jsapi_ticket()
+        logger.info("飞书 Token 缓存预热完成")
+    except Exception as e:
+        logger.warning(f"飞书 Token 预热失败（非致命）: {e}")
+
     yield
     # 关闭时
     logger.info("应用关闭中...")

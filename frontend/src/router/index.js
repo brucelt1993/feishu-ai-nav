@@ -1,7 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
+import { useUserStore } from '@/stores/user'
+import { isInFeishu } from '@/utils/feishu'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'LoginLoading',
+    component: () => import('@/views/LoginLoading.vue'),
+    meta: { title: '登录中...' }
+  },
   {
     path: '/',
     name: 'Home',
@@ -88,6 +96,22 @@ router.beforeEach((to, from, next) => {
       next({ name: 'AdminLogin', query: { redirect: to.fullPath } })
       return
     }
+  }
+
+  // 用户端：飞书环境下未登录自动跳转登录页
+  const allowAnonymous = import.meta.env.VITE_ALLOW_ANONYMOUS === 'true'
+  const userStore = useUserStore()
+  const publicPages = ['LoginLoading', 'AdminLogin']  // 不需要登录的页面
+
+  // 如果：在飞书环境 + 未登录 + 不允许匿名 + 不是公开页面 → 跳转登录页
+  if (
+    isInFeishu() &&
+    !userStore.isLoggedIn &&
+    !allowAnonymous &&
+    !publicPages.includes(to.name)
+  ) {
+    next({ name: 'LoginLoading' })
+    return
   }
 
   next()

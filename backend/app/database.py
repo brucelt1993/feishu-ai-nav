@@ -25,6 +25,8 @@ if "sqlite" not in database_url:
     engine_kwargs.update({
         "pool_size": 10,
         "max_overflow": 20,
+        "pool_recycle": 300,  # 每 5 分钟回收连接
+        "pool_pre_ping": True,  # 使用前检测连接有效性
     })
 
 engine = create_async_engine(database_url, **engine_kwargs)

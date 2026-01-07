@@ -356,7 +356,7 @@ import { ElMessage } from 'element-plus'
 import { Collection, Plus, Menu, Grid, Search, User, Sunny, Moon, TrendCharts, QuestionFilled, Clock, Close, PriceTag } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { categoriesApi, toolsApi } from '@/api'
-import { initFeishuSDK, feishuLogin, openInFeishu, isInFeishu } from '@/utils/feishu'
+import { openInFeishu, isInFeishu } from '@/utils/feishu'
 import { useNavMode } from '@/composables/useNavMode'
 import { useTheme } from '@/composables/useTheme'
 import { useKeyboardNav } from '@/composables/useKeyboardNav'
@@ -447,33 +447,24 @@ watch(currentMode, async (mode) => {
 })
 
 onMounted(async () => {
-  await loadCategories()
-  loadHotwords()
-  fetchHistory()  // 加载搜索历史
-  loadTags()      // 加载标签
+  // 并行加载数据
+  const dataPromises = [
+    loadCategories(),
+    loadTags(),
+  ]
 
-  // 如果当前是全局模式，加载全部工具（解决从其他页面返回时不刷新的问题）
-  if (currentMode.value === 'global') {
-    await loadGlobalTools()
+  // 热词和历史不影响主体，静默加载
+  loadHotwords()
+  if (userStore.isLoggedIn) {
+    fetchHistory()
   }
 
-  // 飞书环境自动登录
-  console.log('检测飞书环境:', isInFeishu(), 'UA:', navigator.userAgent)
+  // 等待核心数据加载完成
+  await Promise.all(dataPromises)
 
-  if (isInFeishu() && !userStore.isLoggedIn) {
-    try {
-      console.log('开始初始化飞书SDK...')
-      const sdkReady = await initFeishuSDK()
-      console.log('SDK初始化结果:', sdkReady)
-
-      if (sdkReady) {
-        console.log('开始飞书登录...')
-        await feishuLogin()
-        console.info('飞书自动登录成功')
-      }
-    } catch (e) {
-      console.error('自动登录失败:', e)
-    }
+  // 如果当前是全局模式，加载全部工具
+  if (currentMode.value === 'global') {
+    await loadGlobalTools()
   }
 })
 
@@ -636,21 +627,12 @@ function handleCategorySelect(index) {
 
 async function handleLogin() {
   if (!isInFeishu()) {
-    ElMessage.warning('请在飞书中打开此页面')
+    ElMessage.warning('请在飞书客户端中打开')
     return
   }
 
-  try {
-    // 确保SDK已初始化
-    if (!window.__FEISHU_APP_ID__) {
-      await initFeishuSDK()
-    }
-    await feishuLogin()
-    ElMessage.success('登录成功')
-  } catch (error) {
-    console.error('登录失败:', error)
-    ElMessage.error('登录失败')
-  }
+  // 跳转到登录页
+  router.push('/login')
 }
 
 async function handleToolClick(tool) {
