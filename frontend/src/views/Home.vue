@@ -21,7 +21,7 @@
           <el-icon><Collection /></el-icon>
           <span>收藏</span>
         </router-link>
-        <div class="user-info" v-if="userStore.isLoggedIn">
+        <div class="user-info" v-if="userStore.isLoggedIn" @click="handleAvatarClick">
           <el-avatar :src="userStore.userAvatar" :size="32">
             {{ userStore.userName.charAt(0) }}
           </el-avatar>
@@ -356,7 +356,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Plus, Menu, Grid, Search, User, Sunny, Moon, TrendCharts, QuestionFilled, Clock, Close, PriceTag } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { categoriesApi, toolsApi } from '@/api'
@@ -411,6 +411,10 @@ const categories = ref([])
 const loading = ref(true)
 const activeCategory = ref('')
 const showWantDialog = ref(false)
+
+// 头像点击计数（调试用，5次触发登出）
+let avatarClickCount = 0
+let avatarClickTimer = null
 
 // 全局模式数据
 const globalTools = ref([])
@@ -653,6 +657,25 @@ async function handleLogin() {
 
   // 跳转到登录页
   router.push('/login')
+}
+
+// 头像点击处理（5次触发调试登出）
+function handleAvatarClick() {
+  avatarClickCount++
+  clearTimeout(avatarClickTimer)
+  avatarClickTimer = setTimeout(() => { avatarClickCount = 0 }, 2000)
+
+  if (avatarClickCount >= 5) {
+    avatarClickCount = 0
+    ElMessageBox.confirm('确定要登出当前用户吗？', '调试登出', {
+      confirmButtonText: '登出',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      userStore.logout()
+      ElMessage.success('已登出')
+    }).catch(() => {})
+  }
 }
 
 async function handleToolClick(tool) {
