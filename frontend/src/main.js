@@ -98,3 +98,19 @@ window.__PERF__?.mark('插件注册完成')
 
 app.mount('#app')
 window.__PERF__?.mark('app.mount完成')
+
+// 移除 loading 界面（带淡出动画）
+const hideLoading = () => {
+  const loading = document.getElementById('app-loading')
+  if (loading) {
+    loading.classList.add('fade-out')
+    setTimeout(() => loading.remove(), 300)
+    window.__PERF__?.mark('loading移除')
+  }
+}
+
+// 路由准备好后移除 loading
+router.isReady().then(() => {
+  window.__PERF__?.mark('router就绪')
+  hideLoading()
+})
